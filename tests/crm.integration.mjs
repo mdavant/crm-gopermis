@@ -103,10 +103,23 @@ test(
         { email: "admin@example.test", password: "wrong" },
         401,
       );
-      await request("login", {
+      const authenticated = await request("login", {
         email: "admin@example.test",
         password: "fictitious-test-password",
       });
+      assert.equal(
+        authenticated.session,
+        undefined,
+        "Production never exposes session tokens in JSON",
+      );
+      const bearerOnly = await fetch(env.APP_ORIGIN + "/api/me", {
+        headers: { Authorization: "Bearer " + cookie.split("=")[1] },
+      });
+      assert.equal(
+        bearerOnly.status,
+        401,
+        "Production ignores preview bearer transport",
+      );
       await request(
         "clients",
         { firstName: "Fail", lastName: "Origin", phone: "0600000000" },

@@ -1,6 +1,7 @@
 import pg from "pg";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { embeddedPool } from "./embedded-pool.mjs";
 import { migrate } from "../scripts/migrations.mjs";
 import { accountInput, createAccount } from "./accounts.mjs";
 // Shared across Next HMR/module reloads; a failed init can be retried.
@@ -34,27 +35,14 @@ async function initialise(bootstrap) {
         throw Error(
           "Choisir une seule base : DATABASE_MODE=pglite requiert DATABASE_URL vide.",
         );
-      const [{ PGlite }, { btree_gist }, { PGLiteSocketServer }] =
-        await Promise.all([
-          import("@electric-sql/pglite"),
-          import("@electric-sql/pglite/contrib/btree_gist"),
-          import("@electric-sql/pglite-socket"),
-        ]);
+      const [{ PGlite }, { btree_gist }] = await Promise.all([
+        import("@electric-sql/pglite"),
+        import("@electric-sql/pglite/contrib/btree_gist"),
+      ]);
       const dataDir = resolve(process.env.PGLITE_DATA_DIR ?? ".data/preview");
       await mkdir(dataDir, { recursive: true });
       embedded = await PGlite.create({ dataDir, extensions: { btree_gist } });
-      socket = new PGLiteSocketServer({
-        db: embedded,
-        port: Number(process.env.PGLITE_PORT ?? 0),
-        host: "127.0.0.1",
-        maxConnections: 1,
-      });
-      await socket.start(); // Never attach to a different process on EADDRINUSE.
-      pool = new pg.Pool({
-        connectionString: `postgres://preview:preview@${socket.getServerConn()}/postgres`,
-        max: 1,
-        connectionTimeoutMillis: 5000,
-      });
+      pool = embeddedPool(embedded);
       const client = await pool.connect();
       try {
         await migrate(client);
@@ -79,7 +67,7 @@ async function initialise(bootstrap) {
     await pool?.end().catch(() => {});
     await socket?.stop().catch(() => {});
     if (socket) await new Promise((r) => setTimeout(r, 200));
-    await embedded?.close().catch(() => {});
+    if (!pool) await embedded?.close().catch(() => {});
     throw e;
   }
 }
@@ -96,7 +84,7 @@ export async function closeDatabase() {
   await state.pool?.end();
   await state.socket?.stop();
   if (state.socket) await new Promise((r) => setTimeout(r, 200));
-  await state.embedded?.close();
+  if (!state.pool) await state.embedded?.close();
   delete globalThis[key];
   state.pool = undefined;
   state.pending = undefined;

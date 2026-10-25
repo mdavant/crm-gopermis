@@ -41,15 +41,20 @@ test(
       logs = "";
       app = spawn(
         "node",
-        [
-          "node_modules/next/dist/bin/next",
-          "start",
-          "--hostname",
-          "127.0.0.1",
-          "--port",
-          "3102",
-        ],
-        { env: { ...env, ...overrides }, stdio: ["ignore", "pipe", "pipe"] },
+        process.env.PREVIEW_DEV === "1"
+          ? ["scripts/preview.mjs"]
+          : [
+              "node_modules/next/dist/bin/next",
+              "start",
+              "--hostname",
+              "127.0.0.1",
+              "--port",
+              "3102",
+            ],
+        {
+          env: { ...env, PORT: "3102", ...overrides },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
       );
       app.stdout.on("data", (b) => (logs += b));
       app.stderr.on("data", (b) => (logs += b));
@@ -106,18 +111,31 @@ test(
             : {}),
           args: ["--no-sandbox"],
         });
+        let page;
         try {
-          const page = await browser.newPage();
+          page = await browser.newPage();
           const errors = [];
           page.on("pageerror", (e) => errors.push(e.message));
+          let bearerRequests = 0;
+          await page.route("**/api/**", async (route) => {
+            const headers = { ...route.request().headers() };
+            delete headers.cookie;
+            if (headers.authorization) bearerRequests++;
+            await route.continue({ headers });
+          });
           await page.goto(origin);
           await page
             .getByRole("heading", { name: "Créer votre accès." })
             .waitFor();
           await page.getByLabel("Nom affiché").fill("TEST Admin aperçu");
           await page.getByLabel("Identifiant", { exact: true }).fill("admin");
-          assert.equal(await page.getByLabel("Mot de passe").inputValue(), "");
-          await page.getByLabel("Mot de passe").fill(password);
+          assert.equal(
+            await page.getByLabel("Mot de passe", { exact: true }).inputValue(),
+            "",
+          );
+          await page.getByLabel("Mot de passe", { exact: true }).fill(password);
+          if (await page.getByLabel(/^Confirmer le mot de passe/).count())
+            await page.getByLabel(/^Confirmer le mot de passe/).fill(password);
           await page
             .getByRole("button", {
               name: "Créer mon compte et me connecter",
@@ -133,7 +151,7 @@ test(
           await page
             .getByRole("button", { name: "Se connecter", exact: true })
             .waitFor();
-          await page.route("**/api/login", (r) =>
+          await page.route("**/api/auth/login", (r) =>
             r.fulfill({
               status: 502,
               contentType: "text/html",
@@ -141,7 +159,9 @@ test(
             }),
           );
           await page.getByLabel("Identifiant", { exact: true }).fill("admin");
-          await page.getByLabel("Mot de passe").fill(password);
+          await page.getByLabel("Mot de passe", { exact: true }).fill(password);
+          if (await page.getByLabel(/^Confirmer le mot de passe/).count())
+            await page.getByLabel(/^Confirmer le mot de passe/).fill(password);
           await page
             .getByRole("button", { name: "Se connecter", exact: true })
             .click();
@@ -154,13 +174,21 @@ test(
               "Unexpected token",
             ),
           );
-          await page.unroute("**/api/login");
+          await page.unroute("**/api/auth/login");
           await page
             .getByRole("button", { name: "Se connecter", exact: true })
             .click();
           await page
             .getByRole("heading", { name: "Clients", exact: true })
             .waitFor();
+          await page.reload();
+          await page
+            .getByRole("heading", { name: "Clients", exact: true })
+            .waitFor();
+          assert.ok(
+            bearerRequests > 0,
+            "Preview works without cookies using its scoped session token",
+          );
           const cookies = await page.context().cookies();
           cookie =
             "gopermis_session=" +
@@ -169,6 +197,12 @@ test(
           console.log(
             "Preview browser: first admin creation, login, HTML 502 error handling and subsequent real login verified.",
           );
+        } catch (e) {
+          if (page)
+            console.error(
+              (await page.locator("body").innerText()).slice(0, 4000),
+            );
+          throw e;
         } finally {
           await browser.close();
         }
@@ -196,6 +230,63 @@ test(
       assert.equal((await request("me")).name, "TEST Admin aperçu");
       assert.equal((await request("clients")).length, 0);
       assert.equal((await request("resources")).vehicles.length, 0);
+      const client = await request(
+        "clients",
+        { firstName: "TEST", lastName: "Direct", phone: "0600000077" },
+        201,
+      );
+      const service = await request(
+        "clients/" + client.id + "/services",
+        {
+          typeId: "extra",
+          model: "clio-manual",
+          support: "GoPermis",
+          minutes: 60,
+        },
+        201,
+      );
+      const vehicle = await request(
+        "resources",
+        {
+          kind: "vehicle",
+          label: "TEST direct preview",
+          modelId: "clio-manual",
+        },
+        201,
+      );
+      const instructor = await request(
+        "resources",
+        { kind: "instructor", name: "TEST direct preview" },
+        201,
+      );
+      const booking = await request(
+        "services/" + service.id + "/bookings",
+        {
+          vehicleId: vehicle.id,
+          instructorId: instructor.id,
+          startsAt: "2026-01-01T10:00:00Z",
+          endsAt: "2026-01-01T11:00:00Z",
+          requestId: crypto.randomUUID(),
+        },
+        201,
+      );
+      await request("bookings/" + booking.id + "/complete", {}, 422);
+      await request(
+        "services/" + service.id + "/payments",
+        { amountCents: 3500, method: "Carte", requestId: crypto.randomUUID() },
+        201,
+      );
+      await Promise.all(
+        [1, 2, 3].map(() =>
+          request("bookings/" + booking.id + "/complete", {}),
+        ),
+      );
+      const detail = await request("clients/" + client.id);
+      assert.equal(detail.ledger.filter((l) => l.kind === "session").length, 1);
+      assert.equal(
+        detail.ledger.reduce((n, l) => n + l.minutes, 0),
+        0,
+      );
       // Restart using a different bootstrap value: existing account/session must survive.
       await stop();
       await start({
@@ -212,13 +303,68 @@ test(
       await request("login", { username: "admin", password });
       await request("logout", {});
       await request("me", undefined, 401);
-      // An unreachable configured PostgreSQL must return JSON failure, never create a new preview DB.
-      await stop();
-      await start({
-        DATABASE_MODE: "postgres",
-        DATABASE_URL: "postgres://test:test@127.0.0.1:1/missing",
+      await request("login", { identifiant: "admin", password });
+      await request(
+        "auth/password",
+        {
+          currentPassword: changedPassword + "wrong",
+          newPassword: changedPassword,
+        },
+        401,
+      );
+      await request("auth/password", {
+        currentPassword: password,
+        newPassword: changedPassword,
       });
-      await request("login", { identifiant: "admin", password }, 503);
+      await request("me", undefined, 401);
+      await request("login", { identifiant: "admin", password }, 401);
+      const logged = await request("auth/login", {
+        identifiant: "admin",
+        password: changedPassword,
+      });
+      assert.ok(
+        logged.session?.token,
+        "Preview exposes only its preview-scoped session",
+      );
+      const bearerCheck = await fetch(origin + "/api/me", {
+        headers: { Authorization: "Bearer " + logged.session.token },
+      });
+      assert.equal(bearerCheck.status, 200);
+      await request("logout", {});
+      assert.equal(
+        (
+          await fetch(origin + "/api/me", {
+            headers: { Authorization: "Bearer " + logged.session.token },
+          })
+        ).status,
+        401,
+      );
+      await stop();
+      const recovery = spawn("node", ["scripts/reset-password.mjs"], {
+        env: { ...env, RESET_IDENTIFIER: "admin", RESET_PASSWORD: password },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let recoveryLog = "";
+      recovery.stdout.on("data", (b) => (recoveryLog += b));
+      recovery.stderr.on("data", (b) => (recoveryLog += b));
+      const [recoveryCode] = await once(recovery, "exit");
+      assert.equal(recoveryCode, 0, recoveryLog);
+      await start();
+      await request(
+        "login",
+        { identifiant: "admin", password: changedPassword },
+        401,
+      );
+      await request("login", { identifiant: "admin", password });
+      if (process.env.PREVIEW_DEV !== "1") {
+        // An unreachable configured PostgreSQL must return JSON failure, never create a new preview DB.
+        await stop();
+        await start({
+          DATABASE_MODE: "postgres",
+          DATABASE_URL: "postgres://test:test@127.0.0.1:1/missing",
+        });
+        await request("login", { identifiant: "admin", password }, 503);
+      }
       console.log(
         "Preview auth: identifier, cold database, no sample data, strict Origin, persisted session/account and unavailable PostgreSQL verified.",
       );

@@ -1,15 +1,13 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { randomBytes } from "node:crypto";
-import { verifyPassword } from "../../../server/accounts.mjs";
-import { z, ZodError } from "zod";
-import { db } from "../../../server/db";
 import {
-  requireUser,
-  digest,
-  HttpError,
-  checkOrigin,
-} from "../../../server/auth";
+  authenticationStatus,
+  loginAccount,
+  registerAccount,
+  logoutAccount,
+  changePassword,
+} from "../../../server/authentication";
+import { NextResponse } from "next/server";
+import { z, ZodError } from "zod";
+import { requireUser, HttpError, checkOrigin } from "../../../server/auth";
 import {
   catalog,
   listClients,
@@ -57,61 +55,20 @@ async function handle(
         isPost ? await setupAccount(await json()) : await setupStatus(),
         { status: isPost ? 201 : 200 },
       );
-    if (route === "login" && isPost) {
-      const body = z.record(z.string(), z.unknown()).parse(await json());
-      const rawIdentifier = body.identifiant || body.username || body.email;
-      const x = z
-        .object({
-          identifiant: z.string().trim().min(1, "Identifiant requis").max(254),
-          password: z.string().min(1, "Mot de passe requis").max(256),
-        })
-        .parse({
-          identifiant: typeof rawIdentifier === "string" ? rawIdentifier : "",
-          password: body.password,
-        });
-      const identifier = x.identifiant.trim().toLowerCase();
-      const key = digest(identifier);
-      const attempt = await db().query(
-        `INSERT INTO login_attempt(key,attempts) VALUES($1,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN 1 ELSE login_attempt.attempts+1 END,window_start=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN now() ELSE login_attempt.window_start END RETURNING attempts`,
-        [key],
-      );
-      if (attempt.rows[0].attempts > 10)
-        throw new HttpError(
-          429,
-          "Trop de tentatives. Réessayez dans 15 minutes.",
-        );
-      const found = await db().query(
-        "SELECT * FROM app_user WHERE lower(email)=$1 AND active",
-        [identifier],
-      );
-      const u = found.rows[0];
-      if (!verifyPassword(x.password, u?.password_hash) || !u)
-        throw new HttpError(401, "Identifiants incorrects");
-      const token = randomBytes(32).toString("hex");
-      await db().query(
-        "INSERT INTO auth_session(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",
-        [digest(token), u.id],
-      );
-      (await cookies()).set("gopermis_session", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 28800,
+    if (route === "auth/status" && !isPost)
+      return NextResponse.json(await authenticationStatus());
+    if ((route === "login" || route === "auth/login") && isPost)
+      return NextResponse.json(await loginAccount(await json(), req));
+    if (route === "auth/register" && isPost)
+      return NextResponse.json(await registerAccount(await json(), req), {
+        status: 201,
       });
-      return NextResponse.json({ ok: true });
-    }
+    if ((route === "logout" || route === "auth/logout") && isPost)
+      return NextResponse.json(await logoutAccount());
+    if (route === "auth/password" && isPost)
+      return NextResponse.json(await changePassword(await json()));
     if (route === "me" && !isPost)
       return NextResponse.json(await requireUser());
-    if (route === "logout" && isPost) {
-      const token = (await cookies()).get("gopermis_session")?.value;
-      if (token)
-        await db().query("DELETE FROM auth_session WHERE token_hash=$1", [
-          digest(token),
-        ]);
-      (await cookies()).delete("gopermis_session");
-      return NextResponse.json({ ok: true });
-    }
     if (route === "catalog" && !isPost) {
       await requireUser("clients.read");
       return NextResponse.json(await catalog());
@@ -242,13 +199,18 @@ async function handle(
         { status: 422 },
       );
     if (e instanceof HttpError)
-      return NextResponse.json({ error: e.message }, { status: e.status });
-    console.error("API failure:", e);
+      return NextResponse.json(
+        { error: e.message, code: e.code },
+        { status: e.status },
+      );
+    console.error("API failure", {
+      type: e instanceof Error ? e.name : "Unknown",
+    });
     return NextResponse.json(
       {
         error:
-          "Service indisponible. Vérifiez la configuration et la connexion PostgreSQL.",
-        details: e instanceof Error ? e.message : String(e),
+          "Le stockage du CRM est indisponible. Actualisez la connexion ; vos données n’ont pas été réinitialisées.",
+        code: "DATABASE_UNAVAILABLE",
       },
       { status: 503 },
     );

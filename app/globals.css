@@ -1342,3 +1342,39 @@ small {
     padding: 0;
   }
 }
+
+.authCard {
+  width: min(460px, 100%);
+  padding: 32px;
+}
+.login .authCard form {
+  width: auto;
+  padding: 0;
+}
+.login .authRetry,
+.login .passwordToggle {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+  color: #34363c;
+  font-size: 13px;
+}
+.login .passwordToggle {
+  width: auto;
+  margin: 0;
+}
+.authCard > small {
+  display: block;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.accountButton {
+  border: 1px solid #e5e5e7;
+  border-radius: 10px;
+  background: white;
+  padding: 10px;
+  margin: 10px 0;
+  font: inherit;
+  font-size: 12px;
+}

@@ -4,7 +4,7 @@ CRM Next.js / React / TypeScript / PostgreSQL. Clients → plusieurs prestations
 
 ## Aperçu AI Studio et connexion
 
-Pour travailler sur l'interface : `npm ci`, puis `npm run dev`. Sans URL PostgreSQL configurée, l'aperçu de développement utilise une base PGlite persistante. Au premier lancement sans compte, créer l'accès administrateur depuis le formulaire « Créer votre accès ». Aucun mot de passe par défaut n'est livré. Les comptes existants ne sont jamais réinitialisés au démarrage. Voir [Connexion et aperçu](docs/CONNEXION.md) pour la configuration, la persistance et les vérifications.
+Pour travailler sur l'interface dans AI Studio : `npm ci`, puis **`npm run preview`**. Sans URL PostgreSQL configurée, l'aperçu de développement utilise une base PGlite persistante. Au premier lancement sans compte, créer l'accès administrateur depuis le formulaire « Créer votre accès ». Aucun mot de passe par défaut n'est livré. Les comptes existants ne sont jamais réinitialisés au démarrage. Voir [Connexion et aperçu](docs/CONNEXION.md) pour la configuration, la persistance et les vérifications.
 
 ## Développement
 

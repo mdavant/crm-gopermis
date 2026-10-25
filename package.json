@@ -16,7 +16,9 @@
     "test:native": "node scripts/test-native.mjs",
     "test:browser": "node scripts/test-native.mjs --browser",
     "dev:db": "node scripts/dev-db.mjs",
-    "test:preview": "node --test tests/auth.preview.mjs"
+    "test:preview": "node --test tests/auth.preview.mjs",
+    "user:reset-password": "node scripts/reset-password.mjs",
+    "preview": "node scripts/preview.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

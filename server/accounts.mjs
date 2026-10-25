@@ -76,3 +76,8 @@ export function verifyPassword(password, encoded) {
   const computed = scryptSync(password, salt, 64);
   return timingSafeEqual(computed, Buffer.from(hash, "hex")) && valid;
 }
+
+export function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  return salt + ":" + scryptSync(password, salt, 64).toString("hex");
+}

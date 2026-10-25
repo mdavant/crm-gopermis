@@ -1,3 +1,5 @@
+import { previewToken, clearPreviewSession } from "./session";
+import { ApiError } from "./http";
 import { readApiResponse } from "./http";
 import type { Offer, Rate } from "../domain/pricing";
 export type User = { id: string; name: string; permissions: string[] };
@@ -52,17 +54,42 @@ export type Detail = {
   history: { action: string; actor: string; created_at: string }[];
 };
 export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch("/api/" + path, {
-    method: body === undefined ? "GET" : "POST",
-    headers:
-      body === undefined
-        ? { Accept: "application/json" }
-        : { Accept: "application/json", "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-  });
-  return readApiResponse<T>(r);
+  const token = previewToken();
+  let r: Response;
+  try {
+    r = await fetch("/api/" + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        Accept: "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+      },
+      credentials: "same-origin",
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45000),
+    });
+  } catch {
+    throw new ApiError(
+      "Le serveur ne répond pas. Réessayez avec le bouton Actualiser la connexion.",
+      0,
+      "NETWORK_UNAVAILABLE",
+    );
+  }
+  try {
+    return await readApiResponse<T>(r);
+  } catch (e) {
+    if (
+      e instanceof ApiError &&
+      ["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(e.code)
+    ) {
+      clearPreviewSession();
+      window.dispatchEvent(
+        new CustomEvent("gopermis-session-expired", { detail: e.message }),
+      );
+    }
+    throw e;
+  }
 }
 export type Booking = {
   id: string;

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, type FormEvent } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Users,
   Plus,
@@ -19,6 +19,9 @@ import {
   type ClientRecord,
   type Detail,
 } from "../lib/api-types";
+import { AuthGate } from "../components/auth-gate";
+import { AccountSettings } from "../components/account-settings";
+import { clearPreviewSession } from "../lib/session";
 import { Modal } from "../components/modal";
 import { Schedule } from "../components/schedule";
 import { ResourceSettings } from "../components/resources";
@@ -27,8 +30,7 @@ const money = (n: number) =>
   (n / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 export default function Home() {
   const [user, setUser] = useState<User | null>(null),
-    [loading, setLoading] = useState(true),
-    [setupRequired, setSetupRequired] = useState(false),
+    [accountOpen, setAccountOpen] = useState(false),
     [error, setError] = useState(""),
     [rows, setRows] = useState<ClientRecord[]>([]),
     [cat, setCat] = useState<Catalog | null>(null),
@@ -55,23 +57,18 @@ export default function Home() {
     setRows(list);
   }, []);
   useEffect(() => {
-    refresh()
-      .catch(async (e) => {
-        if (
-          e.message === "Connexion requise" ||
-          e.message === "Session expirée"
-        ) {
-          try {
-            setSetupRequired(
-              (await api<{ required: boolean }>("setup")).required,
-            );
-          } catch (error) {
-            setError((error as Error).message);
-          }
-        } else setError(e.message);
-      })
-      .finally(() => setLoading(false));
-  }, [refresh]);
+    if (user?.id) refresh().catch((e) => setError(e.message));
+  }, [user?.id, refresh]);
+  useEffect(() => {
+    const expired = () => {
+      setUser(null);
+      setDetail(null);
+      setRows([]);
+    };
+    window.addEventListener("gopermis-session-expired", expired);
+    return () =>
+      window.removeEventListener("gopermis-session-expired", expired);
+  }, []);
   useEffect(() => {
     if (!user || !user.permissions.includes("clients.read")) return;
     let cancelled = false;
@@ -101,92 +98,7 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function login(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const values = Object.fromEntries(f);
-      if (setupRequired) {
-        await api("setup", values);
-        setSetupRequired(false);
-      }
-      await api("login", values);
-      await refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (loading)
-    return (
-      <div className="loading" role="status">
-        Chargement de GoPermis…
-      </div>
-    );
-  if (!user)
-    return (
-      <div className="login">
-        <form className="card" onSubmit={login}>
-          <div className="brandMark">G</div>
-          <p className="eyebrow">GOPERMIS · ESPACE ÉQUIPE</p>
-          <h1>{setupRequired ? "Créer votre accès." : "Bienvenue."}</h1>
-          <p>
-            {setupRequired
-              ? "Premier lancement de l’aperçu privé : créez votre compte administrateur. Aucun mot de passe par défaut."
-              : "Connectez-vous à votre espace de travail."}
-          </p>
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          {setupRequired && (
-            <label>
-              Nom affiché
-              <input
-                name="name"
-                required
-                maxLength={150}
-                defaultValue="Administrateur GoPermis"
-              />
-            </label>
-          )}
-          <label>
-            Identifiant
-            <input
-              name="identifiant"
-              type="text"
-              autoComplete="username"
-              placeholder="ex: admin"
-              required
-            />
-          </label>
-          <label>
-            Mot de passe
-            <input
-              name="password"
-              type="password"
-              autoComplete={setupRequired ? "new-password" : "current-password"}
-              minLength={setupRequired ? 14 : 1}
-              maxLength={256}
-              placeholder="••••••••••••••••"
-              required
-            />
-          </label>
-          <button className="primary" disabled={busy}>
-            {busy
-              ? "Connexion…"
-              : setupRequired
-                ? "Créer mon compte et me connecter"
-                : "Se connecter"}
-          </button>
-          <small>Accès réservé aux comptes créés par un administrateur.</small>
-        </form>
-      </div>
-    );
+  if (!user) return <AuthGate onAuthenticated={setUser} />;
   return (
     <div className="appShell">
       <aside className={"sidebar " + (side ? "open" : "")}>
@@ -239,6 +151,9 @@ export default function Home() {
             Google et WhatsApp non connectés
           </p>
         </div>
+        <button className="accountButton" onClick={() => setAccountOpen(true)}>
+          Mon compte · mot de passe
+        </button>
         <div className="profile">
           <div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div>
           <div>
@@ -249,7 +164,8 @@ export default function Home() {
             aria-label="Se déconnecter"
             onClick={async () => {
               try {
-                await api("logout", {});
+                await api("auth/logout", {});
+                clearPreviewSession();
                 setUser(null);
                 setDetail(null);
                 setRows([]);
@@ -463,6 +379,17 @@ export default function Home() {
           )}
         </div>
       </main>
+      {accountOpen && (
+        <AccountSettings
+          close={() => setAccountOpen(false)}
+          done={() => {
+            setAccountOpen(false);
+            setUser(null);
+            setRows([]);
+            setDetail(null);
+          }}
+        />
+      )}
       {create && (
         <Modal title="Nouveau client" close={() => setCreate(false)}>
           <form

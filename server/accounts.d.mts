@@ -5,3 +5,5 @@ export function createAccount(
   input: { identifier: string; password: string; name: string },
   options?: { initialOnly?: boolean },
 ): Promise<boolean>;
+
+export function hashPassword(password: string): string;

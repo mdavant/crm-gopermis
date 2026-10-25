@@ -1,3 +1,13 @@
+# Refonte des sessions et de l’aperçu intégré — 25 octobre 2026
+
+Refonte du service d’authentification et de l’écran de connexion. Base PGlite directe sans serveur TCP, isolation transactionnelle en aperçu, commande dédiée `npm run preview`, session limitée à l’onglet pour les iframes bloquant les cookies, contrôle de session avant ouverture du CRM, codes d’erreur structurés, changement de mot de passe et récupération opérateur.
+
+Résultats exécutés : typage et lint sans erreur/alerte, 14 tests unitaires réussis, build normal réussi ; scénario d’aperçu avec cookies supprimés à chaque requête et rechargement réussi ; scénario également exécuté avec le vrai lanceur `npm run preview` en développement, avec création/connexion, redémarrage et récupération. Parcours métier complet PGlite/direct et PostgreSQL natif, concurrence et restauration réussis. Le mode production ne retourne aucun jeton dans le JSON et rejette le Bearer d’aperçu. Audit npm : aucune vulnérabilité signalée. Le changement de mot de passe, la révocation des sessions et le script de récupération ont été exercés sur des comptes de test aléatoires.
+
+Les résultats de la refonte sont détaillés dans [CONNEXION](CONNEXION.md). Les tests antérieurs ci-dessous concernent les lots précédents ; ils ne prouvaient pas le fonctionnement avec cookies bloqués.
+
+---
+
 # Correctif connexion — 25 octobre 2026
 
 Reprise du commit GitHub `49fc411` (identifiant + PGlite). Connexion par identifiant conservée. Suppression des mots de passe embarqués, du formulaire prérempli, de la réinitialisation des comptes et des données fictives automatiques ; base d'aperçu persistante, initialisation par formulaire en aperçu privé, verrouillage transactionnel du premier compte, erreurs HTML/JSON distinguées, vérification d'origine stricte et lockfile restauré.

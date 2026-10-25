@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gopermis
+      POSTGRES_USER: gopermis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U gopermis']
+      interval: 5s
+      retries: 10
+  app:
+    build: .
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      DATABASE_URL: postgres://gopermis:${POSTGRES_PASSWORD}@db:5432/gopermis
+      APP_ORIGIN: ${APP_ORIGIN:?Définir APP_ORIGIN}
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres_data:

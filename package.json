@@ -1,0 +1,47 @@
+{
+  "name": "gopermis-crm",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
+    "user:create": "node scripts/create-user.mjs",
+    "format": "prettier --write .",
+    "test:integration": "node --import tsx --test tests/*.integration.mjs",
+    "test:native": "node scripts/test-native.mjs",
+    "test:browser": "node scripts/test-native.mjs --browser",
+    "dev:db": "node scripts/dev-db.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "next": "^15.5.28",
+    "pg": "^8.23.1",
+    "react": "^19.1.7",
+    "react-dom": "^19.1.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.0.3",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.28",
+    "playwright": "1.64.1",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.2"
+  },
+  "type": "module",
+  "overrides": {
+    "postcss": "8.5.31",
+    "sharp": "0.35.5"
+  }
+}

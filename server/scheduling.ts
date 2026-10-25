@@ -202,13 +202,54 @@ export async function releaseBlock(id: string, actor: string) {
     return { ok: true };
   });
 }
-export async function listBookings(clientId?: string, date?: string) {
+export async function getHomeStats() {
+  const pool = db();
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Europe/Paris",
+  });
+  const [totalClientsRes, todayBookingsRes] = await Promise.all([
+    pool.query(
+      "SELECT count(*)::integer AS total FROM client WHERE status != 'Archivé'",
+    ),
+    pool.query(
+      `SELECT count(*)::integer AS count, COALESCE(sum(minutes),0)::integer AS total_minutes
+       FROM booking
+       WHERE starts_at < (($1::date + 1)::timestamp AT TIME ZONE 'Europe/Paris')
+         AND ends_at > ($1::date::timestamp AT TIME ZONE 'Europe/Paris')`,
+      [today],
+    ),
+  ]);
+  const totalMinutes = todayBookingsRes.rows[0]?.total_minutes ?? 0;
+  return {
+    totalClients: totalClientsRes.rows[0]?.total ?? 0,
+    todayBookingsCount: todayBookingsRes.rows[0]?.count ?? 0,
+    todayMinutes: totalMinutes,
+    todayHours: Math.round((totalMinutes / 60) * 10) / 10,
+  };
+}
+export async function listBookings(
+  clientId?: string,
+  date?: string,
+  startDate?: string,
+  endDate?: string,
+) {
   if (clientId) z.uuid().parse(clientId);
   if (date) z.iso.date().parse(date);
+  if (startDate) z.iso.date().parse(startDate);
+  if (endDate) z.iso.date().parse(endDate);
   return (
     await db().query(
-      `SELECT b.*,v.label AS vehicle_label,i.name AS instructor_name,c.first_name,c.last_name FROM booking b JOIN vehicle v ON v.id=b.vehicle_id LEFT JOIN instructor i ON i.id=b.instructor_id JOIN client c ON c.id=b.client_id WHERE ($1::uuid IS NULL OR b.client_id=$1) AND ($2::date IS NULL OR (b.starts_at<(($2::date+1)::timestamp AT TIME ZONE 'Europe/Paris') AND b.ends_at>($2::date::timestamp AT TIME ZONE 'Europe/Paris'))) ORDER BY b.starts_at ${date ? "ASC" : "DESC"},b.id LIMIT 500`,
-      [clientId ?? null, date ?? null],
+      `SELECT b.*,v.label AS vehicle_label,i.name AS instructor_name,c.first_name,c.last_name 
+       FROM booking b 
+       JOIN vehicle v ON v.id=b.vehicle_id 
+       LEFT JOIN instructor i ON i.id=b.instructor_id 
+       JOIN client c ON c.id=b.client_id 
+       WHERE ($1::uuid IS NULL OR b.client_id=$1) 
+         AND ($2::date IS NULL OR (b.starts_at<(($2::date+1)::timestamp AT TIME ZONE 'Europe/Paris') AND b.ends_at>($2::date::timestamp AT TIME ZONE 'Europe/Paris')))
+         AND ($3::date IS NULL OR b.ends_at>=($3::date::timestamp AT TIME ZONE 'Europe/Paris'))
+         AND ($4::date IS NULL OR b.starts_at<(($4::date+1)::timestamp AT TIME ZONE 'Europe/Paris'))
+       ORDER BY b.starts_at ASC, b.id LIMIT 1000`,
+      [clientId ?? null, date ?? null, startDate ?? null, endDate ?? null],
     )
   ).rows;
 }

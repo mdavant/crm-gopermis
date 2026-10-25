@@ -32,6 +32,7 @@ import {
   listBookings,
   createBooking,
   completeBooking,
+  getHomeStats,
 } from "../../../server/scheduling";
 import { setupStatus, setupAccount } from "../../../server/setup";
 export const runtime = "nodejs";
@@ -191,12 +192,19 @@ async function handle(
       const u = await requireUser("resources.write");
       return NextResponse.json(await releaseBlock(path[1], u.id));
     }
+    if (route === "stats/summary" && !isPost) {
+      await requireUser("clients.read");
+      return NextResponse.json(await getHomeStats());
+    }
     if (route === "bookings" && !isPost) {
       await requireUser("schedule.read");
+      const sp = new URL(req.url).searchParams;
       return NextResponse.json(
         await listBookings(
-          new URL(req.url).searchParams.get("clientId") ?? undefined,
-          new URL(req.url).searchParams.get("date") ?? undefined,
+          sp.get("clientId") ?? undefined,
+          sp.get("date") ?? undefined,
+          sp.get("startDate") ?? undefined,
+          sp.get("endDate") ?? undefined,
         ),
       );
     }

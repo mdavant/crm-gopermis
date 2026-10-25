@@ -137,3 +137,10 @@ export type Resources = {
   }[];
   creditPolicy: "reserve_credit" | "credit_on_completion" | null;
 };
+
+export type HomeStats = {
+  totalClients: number;
+  todayBookingsCount: number;
+  todayMinutes: number;
+  todayHours: number;
+};

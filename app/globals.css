@@ -1449,3 +1449,562 @@ label textarea {
     flex: 1;
   }
 }
+
+/* ==========================================================================
+   PLANNING & CALENDAR GRID ENGINE (Europe/Paris · 08:00 - 20:00)
+   ========================================================================== */
+
+.planningContainer {
+  display: flex;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  min-height: 720px;
+}
+
+/* Dual Sidebar (Secondary Column) */
+.planningDualSidebar {
+  width: 270px;
+  min-width: 270px;
+  background: #fafbfc;
+  border-right: 1px solid #e2e8f0;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .planningDualSidebar {
+    display: none;
+  }
+}
+
+/* Mini Calendar Widget */
+.miniCalWidget {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.miniCalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.miniCalTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: capitalize;
+}
+
+.miniCalNavBtns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.miniCalNavBtns button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  padding: 0;
+}
+
+.miniCalNavBtns button:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.miniCalGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.miniCalDayName {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  padding: 4px 0;
+}
+
+.miniCalDayBtn {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #334155;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.miniCalDayBtn:hover {
+  background: #f1f5f9;
+}
+
+.miniCalDayBtn.dimmed {
+  color: #cbd5e1;
+}
+
+.miniCalDayBtn.today {
+  color: #ea580c;
+  font-weight: 700;
+  background: #fff7ed;
+}
+
+.miniCalDayBtn.selected {
+  background: #ea580c;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
+}
+
+/* Sidebar Filter Sections */
+.filterSectionTitle {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filterList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.filterItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filterItem input[type="checkbox"] {
+  accent-color: #ea580c;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.filterDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Calendar Main Area */
+.planningMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #ffffff;
+}
+
+/* Top Toolbar */
+.calendarToolbar {
+  padding: 16px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #ffffff;
+}
+
+.calendarNavGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calendarPeriodTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+}
+
+.calendarNavControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendarNavControls button {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.calendarNavControls button:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.calendarRightControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* View Switcher Pill */
+.viewSwitcher {
+  display: inline-flex;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 10px;
+}
+
+.viewSwitcher button {
+  border: 0;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.viewSwitcher button.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.btnPrimaryOrange {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 0;
+  background: linear-gradient(135deg, #ff6a00 0%, #ea580c 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.28);
+}
+
+.btnPrimaryOrange:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35);
+}
+
+/* Calendar Grid Wrapper & Stage */
+.calendarGridContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 820px;
+  position: relative;
+}
+
+.calendarHeaderRow {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafbfc;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.calendarTimeHeaderCorner {
+  width: 64px;
+  min-width: 64px;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.calendarColumnsHeader {
+  display: flex;
+  flex: 1;
+  min-width: 600px;
+}
+
+.calendarDayHeaderCell {
+  flex: 1;
+  padding: 12px 8px;
+  text-align: center;
+  border-right: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.calendarDayHeaderCell:last-child {
+  border-right: 0;
+}
+
+.calendarDayName {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.calendarDayNumber {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.calendarDayHeaderCell.isToday .calendarDayName {
+  color: #ea580c;
+}
+
+.calendarDayHeaderCell.isToday .calendarDayNumber {
+  background: #ea580c;
+  color: #ffffff;
+}
+
+/* Calendar Body (Rows & Columns) */
+.calendarBody {
+  display: flex;
+  position: relative;
+  min-width: 664px;
+}
+
+/* Left Time Axis */
+.calendarTimeAxis {
+  width: 64px;
+  min-width: 64px;
+  border-right: 1px solid #e2e8f0;
+  background: #fafbfc;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendarTimeSlotLabel {
+  height: 60px;
+  padding-right: 8px;
+  padding-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: right;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* Day Columns Grid */
+.calendarColumnsGrid {
+  display: flex;
+  flex: 1;
+  position: relative;
+}
+
+.calendarDayColumnTrack {
+  flex: 1;
+  position: relative;
+  border-right: 1px solid #f1f5f9;
+  background: #ffffff;
+}
+
+.calendarDayColumnTrack:last-child {
+  border-right: 0;
+}
+
+.calendarDayColumnTrack.isToday {
+  background: rgba(255, 247, 237, 0.25);
+}
+
+.calendarHourSlotLine {
+  height: 60px;
+  border-bottom: 1px solid #f1f5f9;
+  position: relative;
+}
+
+.calendarHourSlotLine::after {
+  content: "";
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed rgba(241, 245, 249, 0.85);
+}
+
+/* Session Cards on Calendar */
+.calendarEventCard {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, z-index 0.12s ease;
+  z-index: 2;
+}
+
+.calendarEventCard:hover {
+  transform: translateY(-1px);
+  z-index: 8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+}
+
+.calendarEventCard.status-confirmed {
+  background: #fff7ed;
+  border-left: 3.5px solid #ea580c;
+  color: #9a3412;
+  box-shadow: 0 1px 3px rgba(234, 88, 12, 0.1);
+}
+
+.calendarEventCard.status-completed {
+  background: #ecfdf5;
+  border-left: 3.5px solid #10b981;
+  color: #065f46;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+}
+
+.calendarEventTitle {
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.calendarEventMeta {
+  font-size: 10.5px;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.calendarEventTimeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+/* ACCUEIL BENTO & CHANGELOG */
+.dashHeroStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.dashQuickActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.changelogTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.changelogItem {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fafbfc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.changelogBadge {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  height: fit-content;
+  white-space: nowrap;
+}
+
+.changelogDate {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 3px;
+}
+
+.changelogTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.changelogDesc {
+  font-size: 12.5px;
+  color: #475569;
+  margin-top: 3px;
+  line-height: 1.45;
+}

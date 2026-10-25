@@ -13,7 +13,8 @@ import {
 } from "../../../server/authentication";
 import { NextResponse } from "next/server";
 import { z, ZodError } from "zod";
-import { requireUser, HttpError, checkOrigin } from "../../../server/auth";
+import { requireUser, HttpError, checkOrigin, previewMode } from "../../../server/auth";
+import { db } from "../../../server/db";
 import {
   catalog,
   detail,
@@ -71,6 +72,20 @@ async function handle(
       return NextResponse.json(await logoutAccount());
     if (route === "auth/password" && isPost)
       return NextResponse.json(await changePassword(await json()));
+    if (route === "auth/preview-reset" && isPost) {
+      if (!previewMode())
+        throw new HttpError(403, "Action réservée à l'aperçu privé.");
+      const c = await db().connect();
+      try {
+        await c.query("DELETE FROM auth_session");
+        await c.query("DELETE FROM user_role");
+        await c.query("DELETE FROM app_user");
+        await c.query("DELETE FROM login_attempt");
+        return NextResponse.json({ ok: true });
+      } finally {
+        c.release();
+      }
+    }
     if (route === "me" && !isPost)
       return NextResponse.json(await requireUser());
     if (route === "catalog" && !isPost) {

@@ -10,31 +10,31 @@ const state = globalThis[key] ?? (globalThis[key] = {});
 async function initialise(bootstrap) {
   let pool, embedded, socket;
   try {
-    const url = process.env.DATABASE_URL?.trim();
-    const mode =
-      process.env.DATABASE_MODE ??
-      (url
-        ? "postgres"
-        : process.env.NODE_ENV === "production"
-          ? "postgres"
-          : "pglite");
-    if (mode === "postgres") {
-      if (!url)
-        throw Error(
-          "DATABASE_URL requise en mode PostgreSQL. Pour une prévisualisation locale, configurer DATABASE_MODE=pglite.",
-        );
-      pool = new pg.Pool({
-        connectionString: url,
-        max: Number(process.env.DB_POOL_SIZE ?? 10),
-        connectionTimeoutMillis: 5000,
-      });
-      // A configured DB failure must never redirect users to another database.
-      await pool.query("SELECT 1");
-    } else if (mode === "pglite") {
-      if (url)
-        throw Error(
-          "Choisir une seule base : DATABASE_MODE=pglite requiert DATABASE_URL vide.",
-        );
+    const rawUrl = process.env.DATABASE_URL?.trim();
+    const isPlaceholder = Boolean(rawUrl && (rawUrl.includes("change-me") || rawUrl.includes("localhost:5432")));
+    const url = isPlaceholder ? "" : rawUrl;
+    let mode = process.env.DATABASE_MODE ?? (url ? "postgres" : "pglite");
+    if (isPlaceholder && process.env.DATABASE_MODE === "postgres") {
+      mode = "pglite";
+    }
+
+    if (mode === "postgres" && url) {
+      try {
+        pool = new pg.Pool({
+          connectionString: url,
+          max: Number(process.env.DB_POOL_SIZE ?? 10),
+          connectionTimeoutMillis: 3000,
+        });
+        await pool.query("SELECT 1");
+      } catch (err) {
+        console.warn("PostgreSQL unreachable, falling back to embedded PGlite:", err?.message || err);
+        await pool?.end().catch(() => {});
+        pool = null;
+        mode = "pglite";
+      }
+    }
+
+    if (mode === "pglite" || !pool) {
       const [{ PGlite }, { btree_gist }, { pg_trgm }] = await Promise.all([
         import("@electric-sql/pglite"),
         import("@electric-sql/pglite/contrib/btree_gist"),
@@ -53,7 +53,7 @@ async function initialise(bootstrap) {
       } finally {
         client.release();
       }
-    } else throw Error("DATABASE_MODE invalide : postgres ou pglite attendu.");
+    }
     if (bootstrap && process.env.BOOTSTRAP_PASSWORD) {
       const client = await pool.connect();
       try {

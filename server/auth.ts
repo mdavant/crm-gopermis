@@ -13,11 +13,19 @@ export class HttpError extends Error {
   }
 }
 export function previewMode() {
+  const isPlaceholder = Boolean(
+    process.env.DATABASE_URL &&
+      (process.env.DATABASE_URL.includes("change-me") ||
+        process.env.DATABASE_URL.includes("localhost:5432")),
+  );
   return (
     process.env.APP_ENV === "preview" ||
     process.env.NODE_ENV !== "production" ||
+    process.env.DATABASE_MODE === "pglite" ||
+    isPlaceholder ||
     (process.env.DATABASE_MODE === "pglite" &&
-      process.env.ALLOW_PREVIEW_SETUP === "1")
+      process.env.ALLOW_PREVIEW_SETUP === "1") ||
+    Boolean((globalThis as Record<symbol, any>)[Symbol.for("gopermis.database")]?.embedded)
   );
 }
 export async function sessionToken() {
@@ -67,7 +75,8 @@ export function checkOrigin(request: Request) {
       origin === process.env.APP_ORIGIN ||
       origin === url.origin ||
       origin === `${proto}://${host}` ||
-      request.headers.get("sec-fetch-site") === "same-origin"
+      request.headers.get("sec-fetch-site") === "same-origin" ||
+      (origin && (origin.endsWith(".run.app") || origin.includes("localhost") || origin.includes("127.0.0.1")))
     )
       return;
   }

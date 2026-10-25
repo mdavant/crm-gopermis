@@ -35,13 +35,17 @@ async function initialise(bootstrap) {
         throw Error(
           "Choisir une seule base : DATABASE_MODE=pglite requiert DATABASE_URL vide.",
         );
-      const [{ PGlite }, { btree_gist }] = await Promise.all([
+      const [{ PGlite }, { btree_gist }, { pg_trgm }] = await Promise.all([
         import("@electric-sql/pglite"),
         import("@electric-sql/pglite/contrib/btree_gist"),
+        import("@electric-sql/pglite/contrib/pg_trgm"),
       ]);
       const dataDir = resolve(process.env.PGLITE_DATA_DIR ?? ".data/preview");
       await mkdir(dataDir, { recursive: true });
-      embedded = await PGlite.create({ dataDir, extensions: { btree_gist } });
+      embedded = await PGlite.create({
+        dataDir,
+        extensions: { btree_gist, pg_trgm },
+      });
       pool = embeddedPool(embedded);
       const client = await pool.connect();
       try {

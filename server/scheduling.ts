@@ -202,12 +202,13 @@ export async function releaseBlock(id: string, actor: string) {
     return { ok: true };
   });
 }
-export async function listBookings(clientId?: string) {
+export async function listBookings(clientId?: string, date?: string) {
   if (clientId) z.uuid().parse(clientId);
+  if (date) z.iso.date().parse(date);
   return (
     await db().query(
-      `SELECT b.*,v.label AS vehicle_label,i.name AS instructor_name,c.first_name,c.last_name FROM booking b JOIN vehicle v ON v.id=b.vehicle_id LEFT JOIN instructor i ON i.id=b.instructor_id JOIN client c ON c.id=b.client_id ${clientId ? "WHERE b.client_id=$1" : ""} ORDER BY b.starts_at DESC LIMIT 500`,
-      clientId ? [clientId] : [],
+      `SELECT b.*,v.label AS vehicle_label,i.name AS instructor_name,c.first_name,c.last_name FROM booking b JOIN vehicle v ON v.id=b.vehicle_id LEFT JOIN instructor i ON i.id=b.instructor_id JOIN client c ON c.id=b.client_id WHERE ($1::uuid IS NULL OR b.client_id=$1) AND ($2::date IS NULL OR (b.starts_at<(($2::date+1)::timestamp AT TIME ZONE 'Europe/Paris') AND b.ends_at>($2::date::timestamp AT TIME ZONE 'Europe/Paris'))) ORDER BY b.starts_at ${date ? "ASC" : "DESC"},b.id LIMIT 500`,
+      [clientId ?? null, date ?? null],
     )
   ).rows;
 }

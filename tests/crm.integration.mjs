@@ -1,6 +1,7 @@
 import pg from "pg";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
@@ -26,7 +27,7 @@ test(
     const native = process.env.NATIVE_TEST_DATABASE_URL;
     const db = native
       ? new pg.Pool({ connectionString: native, max: 10 })
-      : await PGlite.create({ extensions: { btree_gist } });
+      : await PGlite.create({ extensions: { btree_gist, pg_trgm } });
     const socket = native
       ? null
       : new PGLiteSocketServer({ db, port: 55432, host: "127.0.0.1" });
@@ -89,6 +90,8 @@ test(
         const value = await r.json();
         if (expected === "conflict-or-created")
           assert.ok([201, 409].includes(r.status), JSON.stringify(value));
+        else if (expected === "edit-race")
+          assert.ok([200, 409].includes(r.status), JSON.stringify(value));
         else if (expected === "completion-race")
           assert.ok([200, 422].includes(r.status), JSON.stringify(value));
         else assert.equal(r.status, expected, JSON.stringify(value));
@@ -236,6 +239,7 @@ test(
         db.query("UPDATE service SET price_snapshot='{}'::jsonb"),
       );
       await schedulingScenario(request, db, service, second, client, !!native);
+      await directoryScenario(request, db, client, !!native);
       // Remove role while session exists: server must immediately deny access.
       await db.query("DELETE FROM user_role");
       await request("clients", undefined, 403);
@@ -445,6 +449,16 @@ async function schedulingScenario(
   };
   const futureBooking = await book(service.id, future);
   await request("bookings/" + futureBooking.id + "/complete", {}, 422);
+  const todayOnly = await request("bookings?date=2026-01-10");
+  assert.ok(todayOnly.some((x) => x.id === b.id));
+  assert.ok(!todayOnly.some((x) => x.id === futureBooking.id));
+  assert.ok(
+    (await request("bookings?date=2099-01-10")).some(
+      (x) => x.id === futureBooking.id,
+    ),
+  );
+  await request("bookings?date=2026-02-31", undefined, 422);
+
   await request("resources/archive", { kind: "vehicle", id: vehicle.id }, 409);
   const ended = await request(
     "clients/" + c2.id + "/services",
@@ -547,4 +561,105 @@ async function schedulingScenario(
   );
   await request("bookings/" + b.id + "/complete", {}, 403);
   await request("resources", { kind: "instructor", name: "Unauthorized" }, 403);
+}
+
+async function directoryScenario(request, db, client, native) {
+  const before = await request("clients/" + client.id);
+  const data = {
+    firstName: "Élodie",
+    lastName: "Fictive actualisée",
+    phone: "+33 6 00 00 00 11",
+    email: "elodie.maj@example.test",
+    source: "TEST mise à jour",
+    version: before.client.version,
+  };
+  const changed = await request("clients/" + client.id, data);
+  assert.equal(changed.version, before.client.version + 1);
+  await request("clients/" + client.id, { ...data, lastName: "Stale" }, 409);
+  await request(
+    "clients/" + client.id,
+    { ...data, version: changed.version, phone: "0600000042" },
+    409,
+  );
+  await request(
+    "clients",
+    { firstName: "TEST", lastName: "Double", phone: "0033600000011" },
+    409,
+  );
+  const after = await request("clients/" + client.id);
+  assert.equal(after.client.last_name, data.lastName);
+  assert.deepEqual(
+    after.services.map((s) => s.price_snapshot),
+    before.services.map((s) => s.price_snapshot),
+  );
+  assert.deepEqual(
+    after.ledger.map((l) => l.id),
+    before.ledger.map((l) => l.id),
+  );
+  assert.equal(
+    after.history.filter((a) => a.action === "client.updated").length,
+    1,
+  );
+  await db.query(
+    "INSERT INTO client(first_name,last_name,phone,source) SELECT 'TEST Répertoire','Paginé '||n,'07'||lpad(n::text,8,'0'),'TEST SQL' FROM generate_series(1,2105) n",
+  );
+  await db.query(
+    "INSERT INTO client(first_name,last_name,phone,created_at,source) VALUES('TEST Horsfenêtre','Ancien','0800000000','1990-01-01','TEST SQL')",
+  );
+  assert.equal((await request("clients/search?q=horsfenetre")).total, 1);
+  const one = await request(
+    "clients/search?q=repertoire%20pagine&page=1&pageSize=25&status=Prospect",
+  );
+  const two = await request(
+    "clients/search?q=répertoire%20paginé&page=2&pageSize=25",
+  );
+  assert.equal(one.total, 2105);
+  assert.equal(one.pages, 85);
+  assert.equal(one.items.length, 25);
+  assert.equal(two.items.length, 25);
+  assert.ok(!one.items.some((a) => two.items.some((b) => a.id === b.id)));
+  assert.equal(
+    (await request("clients/search?q=repertoire%20pagine&page=86")).items
+      .length,
+    0,
+  );
+  await request("clients/search?page=0", undefined, 422);
+  await request("clients/search?pageSize=101", undefined, 422);
+  assert.equal((await request("clients?q=horsfenetre")).length, 1);
+  const index = (
+    await db.query(
+      "SELECT indexname FROM pg_indexes WHERE tablename='client' AND indexname='client_search_trgm'",
+    )
+  ).rows;
+  assert.equal(index.length, 1);
+  if (native) {
+    const duplicate = {
+      firstName: "TEST",
+      lastName: "Concurrent",
+      phone: "0699999911",
+    };
+    const results = await Promise.all([
+      request("clients", duplicate, "conflict-or-created"),
+      request(
+        "clients",
+        { ...duplicate, phone: "+33 6 99 99 99 11" },
+        "conflict-or-created",
+      ),
+    ]);
+    assert.deepEqual(results.map((r) => r.httpStatus).sort(), [201, 409]);
+    const a = { ...data, version: changed.version };
+    const updates = await Promise.all([
+      request(
+        "clients/" + client.id,
+        { ...a, lastName: "Concurrent A" },
+        "edit-race",
+      ),
+      request(
+        "clients/" + client.id,
+        { ...a, lastName: "Concurrent B" },
+        "edit-race",
+      ),
+    ]);
+    assert.deepEqual(updates.map((r) => r.httpStatus).sort(), [200, 409]);
+  }
 }

@@ -18,6 +18,15 @@ export type ClientRecord = {
   status: string;
   source: string;
   created_at: string;
+  version: number;
+  updated_at: string;
+};
+export type ClientPage = {
+  items: ClientRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pages: number;
 };
 export type ServiceRecord = {
   id: string;

@@ -1,12 +1,7 @@
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import { db } from "./db";
-import {
-  quote,
-  normalizeSearch,
-  type Rate,
-  type Offer,
-} from "../domain/pricing";
+import { quote, type Rate, type Offer } from "../domain/pricing";
 import { HttpError } from "./auth";
 export const clientInput = z.object({
   firstName: z.string().trim().min(1).max(100),
@@ -75,46 +70,6 @@ export async function catalog() {
     types: types.rows as { id: string; label: string; pricing_mode: string }[],
     models: models.rows as { id: string; label: string }[],
   };
-}
-export async function listClients(q: string) {
-  const rows = await db().query(
-    "SELECT * FROM client ORDER BY created_at DESC LIMIT 2000",
-  );
-  const key = normalizeSearch(q);
-  return rows.rows
-    .filter((c) =>
-      normalizeSearch(
-        [
-          c.first_name,
-          c.last_name,
-          c.phone,
-          c.email ?? "",
-          c.id,
-          c.phone.replace(/^\+33/, "0"),
-        ].join(" "),
-      ).includes(key),
-    )
-    .slice(0, 100);
-}
-export async function createClient(raw: unknown, actor: string) {
-  const x = clientInput.parse(raw);
-  return transaction(async (c) => {
-    const existing = await c.query(
-      `SELECT id,first_name,last_name FROM client WHERE regexp_replace(phone,'[^0-9]','','g')=regexp_replace($1,'[^0-9]','','g') OR ($2::text IS NOT NULL AND lower(email)=lower($2))`,
-      [x.phone, x.email || null],
-    );
-    if (existing.rowCount)
-      throw new HttpError(
-        409,
-        "Un client avec ce téléphone ou cet email existe déjà. Vérifiez sa fiche avant de créer un doublon.",
-      );
-    const result = await c.query(
-      "INSERT INTO client(first_name,last_name,phone,email,source) VALUES($1,$2,$3,$4,$5) RETURNING *",
-      [x.firstName, x.lastName, x.phone, x.email || null, x.source],
-    );
-    await audit(c, actor, "client.created", result.rows[0].id);
-    return result.rows[0];
-  });
 }
 export async function detail(
   id: string,

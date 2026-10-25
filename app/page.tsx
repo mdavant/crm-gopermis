@@ -17,6 +17,7 @@ import {
   type User,
   type Catalog,
   type ClientRecord,
+  type ClientPage,
   type Detail,
 } from "../lib/api-types";
 import { AuthGate } from "../components/auth-gate";
@@ -25,6 +26,7 @@ import { clearPreviewSession } from "../lib/session";
 import { Modal } from "../components/modal";
 import { Schedule } from "../components/schedule";
 import { ResourceSettings } from "../components/resources";
+import { ClientFields } from "../components/client-fields";
 import { ClientDetail } from "../components/client-detail";
 const money = (n: number) =>
   (n / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -36,6 +38,13 @@ export default function Home() {
     [cat, setCat] = useState<Catalog | null>(null),
     [detail, setDetail] = useState<Detail | null>(null),
     [q, setQ] = useState(""),
+    [page, setPage] = useState(1),
+    [displayedPage, setDisplayedPage] = useState(1),
+    [pages, setPages] = useState(0),
+    [total, setTotal] = useState(0),
+    [filter, setFilter] = useState(""),
+    [listLoading, setListLoading] = useState(false),
+    [revision, setRevision] = useState(0),
     [view, setView] = useState("Clients"),
     [side, setSide] = useState(false),
     [create, setCreate] = useState(false),
@@ -49,12 +58,7 @@ export default function Home() {
       setCat(null);
       return;
     }
-    const [c, list] = await Promise.all([
-      api<Catalog>("catalog"),
-      api<ClientRecord[]>("clients"),
-    ]);
-    setCat(c);
-    setRows(list);
+    setCat(await api<Catalog>("catalog"));
   }, []);
   useEffect(() => {
     if (user?.id) refresh().catch((e) => setError(e.message));
@@ -69,28 +73,45 @@ export default function Home() {
     return () =>
       window.removeEventListener("gopermis-session-expired", expired);
   }, []);
+  const canRead = user?.permissions.includes("clients.read") ?? false;
   useEffect(() => {
-    if (!user || !user.permissions.includes("clients.read")) return;
+    if (!canRead) return;
     let cancelled = false;
+    setListLoading(true);
     const timer = setTimeout(() => {
-      api<ClientRecord[]>("clients?q=" + encodeURIComponent(q))
-        .then((v) => {
-          if (!cancelled) setRows(v);
+      const params = new URLSearchParams({
+        q,
+        page: String(page),
+        pageSize: "25",
+        ...(filter ? { status: filter } : {}),
+      });
+      api<ClientPage>("clients/search?" + params)
+        .then((result) => {
+          if (!cancelled) {
+            setRows(result.items);
+            setTotal(result.total);
+            setPages(result.pages);
+            setDisplayedPage(result.page);
+          }
         })
         .catch((e) => {
           if (!cancelled) setError(e.message);
+        })
+        .finally(() => {
+          if (!cancelled) setListLoading(false);
         });
     }, 200);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [q, user]);
+  }, [q, page, filter, canRead, user?.id, revision]);
   async function open(id: string) {
     setError("");
     setBusy(true);
     try {
       setDetail(await api<Detail>("clients/" + id));
+      setRevision((n) => n + 1);
       setView("Clients");
     } catch (e) {
       setError((e as Error).message);
@@ -196,6 +217,7 @@ export default function Home() {
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);
+                setPage(1);
                 setDetail(null);
                 setView("Clients");
               }}
@@ -250,10 +272,32 @@ export default function Home() {
                 <section className="card clientList">
                   <div className="listHeader">
                     <span>
-                      {rows.length} résultat{rows.length > 1 ? "s" : ""}
+                      {total} résultat{total > 1 ? "s" : ""}
                     </span>
-                    <small>100 résultats maximum · affinez la recherche</small>
+                    <label className="directoryFilter">
+                      Statut
+                      <select
+                        aria-label="Filtrer les clients par statut"
+                        value={filter}
+                        onChange={(e) => {
+                          setFilter(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">Tous les statuts</option>
+                        {["Prospect", "Actif", "Terminé", "Archivé"].map(
+                          (value) => (
+                            <option key={value}>{value}</option>
+                          ),
+                        )}
+                      </select>
+                    </label>
                   </div>
+                  {listLoading && (
+                    <p role="status" className="listLoading">
+                      Recherche en cours…
+                    </p>
+                  )}
                   {rows.length === 0 ? (
                     <div className="emptyState">
                       <Users size={36} />
@@ -302,6 +346,25 @@ export default function Home() {
                       </button>
                     ))
                   )}
+                  <div className="pagination">
+                    <button
+                      disabled={page <= 1 || listLoading}
+                      onClick={() => setPage((n) => n - 1)}
+                    >
+                      Page précédente
+                    </button>
+                    <span role="status">
+                      {total === 0
+                        ? "Aucun résultat"
+                        : `Page ${displayedPage} sur ${Math.max(1, pages)} · 25 par page`}
+                    </span>
+                    <button
+                      disabled={page >= pages || listLoading}
+                      onClick={() => setPage((n) => n + 1)}
+                    >
+                      Page suivante
+                    </button>
+                  </div>
                 </section>
               </>
             ))}
@@ -413,38 +476,7 @@ export default function Home() {
               }
             }}
           >
-            <div className="formGrid">
-              <label>
-                Prénom
-                <input name="firstName" required maxLength={100} autoFocus />
-              </label>
-              <label>
-                Nom
-                <input name="lastName" required maxLength={100} />
-              </label>
-            </div>
-            <label>
-              Téléphone
-              <input
-                name="phone"
-                type="tel"
-                required
-                minLength={6}
-                maxLength={30}
-              />
-            </label>
-            <label>
-              Email (facultatif)
-              <input name="email" type="email" />
-            </label>
-            <label>
-              Origine
-              <input
-                name="source"
-                defaultValue="Saisie manuelle"
-                maxLength={100}
-              />
-            </label>
+            <ClientFields />
             <p>La prestation pourra être ajoutée depuis la fiche client.</p>
             <button className="primary" disabled={busy}>
               Créer la fiche

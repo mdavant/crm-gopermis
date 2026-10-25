@@ -4,6 +4,7 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { api, type Detail, type Catalog } from "../lib/api-types";
 import { quote } from "../domain/pricing";
 import { Schedule } from "./schedule";
+import { ClientEditor } from "./client-editor";
 import { Modal } from "./modal";
 const money = (n: number) =>
   (n / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -11,6 +12,7 @@ const date = (s: string) =>
   new Date(s).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
 const actionLabels: Record<string, string> = {
   "client.created": "Client créé",
+  "client.updated": "Coordonnées modifiées",
   "service.created": "Prestation créée",
   "payment.recorded": "Paiement enregistré",
   "note.created": "Note ajoutée",
@@ -33,6 +35,8 @@ export function ClientDetail({
   onError: (e: string) => void;
 }) {
   const [adding, setAdding] = useState(false),
+    [editing, setEditing] = useState(false),
+    [savedMessage, setSavedMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [model, setModel] = useState("clio-manual"),
     [support, setSupport] = useState("GoPermis"),
@@ -74,6 +78,11 @@ export function ClientDetail({
       <button className="backBtn" onClick={back}>
         <ArrowLeft size={17} /> Clients
       </button>
+      {savedMessage && (
+        <p className="success" role="status">
+          {savedMessage}
+        </p>
+      )}
       <div className="clientHero">
         <div className="bigAvatar">
           {d.client.first_name[0]}
@@ -100,6 +109,16 @@ export function ClientDetail({
       <div className="detailGrid">
         <section className="card">
           <h2>Coordonnées & origine</h2>
+          {can("clients.write") && (
+            <button
+              onClick={() => {
+                setSavedMessage("");
+                setEditing(true);
+              }}
+            >
+              Modifier les coordonnées
+            </button>
+          )}
           <p>
             {d.client.phone}
             <br />
@@ -252,6 +271,17 @@ export function ClientDetail({
           </section>
         )}
       </div>
+      {editing && (
+        <ClientEditor
+          client={d.client}
+          close={() => setEditing(false)}
+          reload={reload}
+          saved={async () => {
+            await reload();
+            setSavedMessage("Coordonnées mises à jour.");
+          }}
+        />
+      )}
       {adding && (
         <Modal title="Nouvelle prestation" close={() => setAdding(false)}>
           <form

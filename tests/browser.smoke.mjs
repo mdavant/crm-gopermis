@@ -1,3 +1,4 @@
+import pg from "pg";
 // Called only by test-native.mjs --browser with a fresh, disposable DB.
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
@@ -32,6 +33,14 @@ await run(["scripts/create-user.mjs"], {
   BOOTSTRAP_NAME: "TEST Navigateur",
   BOOTSTRAP_PASSWORD: password,
 });
+const fixtures = new pg.Pool({ connectionString: url });
+try {
+  await fixtures.query(
+    "INSERT INTO client(first_name,last_name,phone,source) SELECT 'TEST Pagination','N° '||n,'078'||lpad(n::text,7,'0'),'TEST navigateur' FROM generate_series(1,26) n",
+  );
+} finally {
+  await fixtures.end();
+}
 const app = spawn(
   "node",
   [
@@ -104,6 +113,19 @@ try {
   await dialog.getByLabel("Téléphone").fill("0600000088");
   await dialog.getByRole("button", { name: "Créer la fiche" }).click();
   await dialog.waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: "Modifier les coordonnées", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Téléphone").fill("0600000089");
+  await dialog
+    .getByRole("button", { name: "Enregistrer les coordonnées", exact: true })
+    .click();
+  await dialog.waitFor({ state: "hidden" });
+  await page
+    .getByRole("status")
+    .filter({ hasText: "Coordonnées mises à jour." })
+    .waitFor();
   await page
     .getByRole("button", { name: "Nouvelle prestation", exact: true })
     .click();
@@ -203,7 +225,10 @@ try {
     animations: "disabled",
   });
   await page.getByRole("button", { name: "Ouvrir le menu" }).click();
-  await page.getByRole("button", { name: "Clients", exact: true }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Clients", exact: true })
+    .click();
   await page.getByRole("button", { name: /TEST Navigateur/ }).click();
   await page.getByRole("button", { name: /Réserver ·/ }).click();
   dialog = page.getByRole("dialog");
@@ -215,6 +240,43 @@ try {
     animations: "disabled",
   });
   await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Ouvrir le menu", exact: true })
+    .click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Clients", exact: true })
+    .click();
+  await page.getByLabel("Rechercher un client").fill("TEST Pagination");
+  await page.getByRole("status").filter({ hasText: "Page 1 sur 2" }).waitFor();
+  assert.equal(await page.locator(".clientRow").count(), 25);
+  await page
+    .getByRole("button", { name: "Page suivante", exact: true })
+    .click();
+  await page.getByRole("status").filter({ hasText: "Page 2 sur 2" }).waitFor();
+  assert.equal(await page.locator(".clientRow").count(), 1);
+  await page
+    .getByRole("button", { name: "Page précédente", exact: true })
+    .click();
+  await page.getByRole("status").filter({ hasText: "Page 1 sur 2" }).waitFor();
+  await noOverflow();
+  await page
+    .getByRole("button", { name: "Ouvrir le menu", exact: true })
+    .click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Planning", exact: true })
+    .click();
+  await page.getByLabel("Journée du planning").fill("2026-01-12");
+  await page.locator(".sessionRow").waitFor();
+  assert.equal(await page.locator(".sessionRow").count(), 1);
+  await noOverflow();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: "artifacts/browser/mobile-planning.png",
+    fullPage: true,
+    animations: "disabled",
+  });
   assert.deepEqual(errors, [], "Browser JS errors");
   console.log(
     "Browser: desktop/mobile, resources, client, service, booking, insufficient credit, payment, completion, keyboard, overflow checks passed.",

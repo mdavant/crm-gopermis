@@ -1,4 +1,10 @@
 import {
+  listClients,
+  createClient,
+  searchClients,
+  updateClient,
+} from "../../../server/clients";
+import {
   authenticationStatus,
   loginAccount,
   registerAccount,
@@ -10,8 +16,6 @@ import { z, ZodError } from "zod";
 import { requireUser, HttpError, checkOrigin } from "../../../server/auth";
 import {
   catalog,
-  listClients,
-  createClient,
   detail,
   createService,
   recordPayment,
@@ -72,6 +76,16 @@ async function handle(
     if (route === "catalog" && !isPost) {
       await requireUser("clients.read");
       return NextResponse.json(await catalog());
+    }
+    if (route === "clients/search" && !isPost) {
+      await requireUser("clients.read");
+      return NextResponse.json(
+        await searchClients(Object.fromEntries(new URL(req.url).searchParams)),
+      );
+    }
+    if (path[0] === "clients" && path.length === 2 && isPost) {
+      const u = await requireUser("clients.write");
+      return NextResponse.json(await updateClient(path[1], await json(), u.id));
     }
     if (route === "clients") {
       const u = await requireUser(isPost ? "clients.write" : "clients.read");
@@ -167,6 +181,7 @@ async function handle(
       return NextResponse.json(
         await listBookings(
           new URL(req.url).searchParams.get("clientId") ?? undefined,
+          new URL(req.url).searchParams.get("date") ?? undefined,
         ),
       );
     }

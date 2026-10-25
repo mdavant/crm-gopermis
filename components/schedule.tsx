@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   api,
   type Booking,
@@ -61,6 +61,10 @@ export function Schedule({
   detail?: Detail;
   reload?: () => Promise<void>;
 }) {
+  const [date, setDate] = useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }),
+  );
+  const latest = useRef(0);
   const [rows, setRows] = useState<Booking[]>([]),
     [resources, setResources] = useState<Resources | null>(null),
     [error, setError] = useState(""),
@@ -70,15 +74,25 @@ export function Schedule({
     [serviceId, setServiceId] = useState(""),
     [requestId, setRequestId] = useState("");
   const refresh = useCallback(async () => {
+    const current = ++latest.current;
+    setLoading(true);
     const [b, r] = await Promise.all([
       api<Booking[]>(
-        "bookings" + (detail ? "?clientId=" + detail.client.id : ""),
+        "bookings" +
+          (detail
+            ? "?clientId=" + detail.client.id
+            : date
+              ? "?date=" + date
+              : ""),
       ),
       api<Resources>("resources"),
     ]);
-    setRows(b);
-    setResources(r);
-  }, [detail]);
+    if (current === latest.current) {
+      setRows(b);
+      setResources(r);
+      setLoading(false);
+    }
+  }, [detail, date]);
   useEffect(() => {
     refresh()
       .catch((e) => setError(e.message))
@@ -117,6 +131,31 @@ export function Schedule({
           Actualiser
         </button>
       </div>
+      {!detail && (
+        <div className="planningFilter">
+          <label>
+            Journée · Europe/Paris
+            <input
+              type="date"
+              aria-label="Journée du planning"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </label>
+          <button
+            onClick={() =>
+              setDate(
+                new Date().toLocaleDateString("en-CA", {
+                  timeZone: "Europe/Paris",
+                }),
+              )
+            }
+          >
+            Aujourd’hui
+          </button>
+          <button onClick={() => setDate("")}>Toutes les séances</button>
+        </div>
+      )}
       <p>
         La planification est autorisée sans crédit. La réalisation exige un
         crédit suffisant et consomme les heures une seule fois.

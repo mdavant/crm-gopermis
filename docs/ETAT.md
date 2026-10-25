@@ -1,3 +1,13 @@
+# État après refonte connexion et annuaire — 25 octobre 2026
+
+La connexion repose désormais sur un service dédié, avec contrôle de session avant ouverture, sessions d'aperçu compatibles avec les cookies bloqués en iframe, stockage embarqué direct sans TCP, changement de mot de passe et récupération opérateur. La création initiale et les comptes existants restent protégés. Référence : [CONNEXION](CONNEXION.md).
+
+L'annuaire recherche toutes les fiches en SQL, avec index, pagination et filtres. Les coordonnées se modifient avec version et audit ; les données liées sont conservées. Le planning global se filtre par journée parisienne. Référence : [ANNUAIRE_CLIENTS](ANNUAIRE_CLIENTS.md).
+
+Les vérifications actuelles figurent en tête de [VERIFICATIONS](VERIFICATIONS.md). Restent à construire : gestion documentaire, grille calendrier avancée et replanification/annulation après arbitrages métier, interface moniteur dédiée, administration complète des tarifs/utilisateurs/droits, facturation et intégrations Google/WhatsApp/IA. Les connexions externes ne sont pas simulées. Les politiques de paiement partiel, de conservation et la matrice de droits restent à valider avant usage réel. Aucun déploiement public effectué. Le CRM n'est pas déclaré entièrement finalisé.
+
+---
+
 # Reprise 0.3 — 25 octobre 2026
 
 Archive V2 extraite dans le dépôt initialement sans commit, aucun AGENTS.md trouvé. Socle réellement validé ici sans adaptateur RSS. Next 15.5.28, React 19.1.7 et overrides PostCSS/sharp conservés ; seul Playwright 1.64.1 ajouté aux dépendances de développement pour rendre le parcours navigateur reproductible.

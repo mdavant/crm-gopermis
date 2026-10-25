@@ -1,3 +1,13 @@
+# Annuaire et planning — lot suivant la refonte
+
+Migrations 004 (recherche générée + index pg_trgm + versions clients) et 005 (lecture planning) ajoutées. Typage/lint/build réussis, 14 tests unitaires réussis. Scénario HTTP étendu réussi sur PGlite et PostgreSQL natif : plus de 2 000 fiches, pagination/count, accentuation et téléphone, doublons, correction et conservation des prestations/journaux, contrôle de version, créations et modifications concurrentes, filtrage de journée du planning. Migrations réexécutées et restauration native réussies.
+
+Le navigateur a effectué une modification de coordonnées, vérifié la réussite puis les données affichées, navigué dans deux pages de résultats sur mobile, sélectionné une journée de planning et contrôlé les débordements. Deux défauts détectés pendant ces contrôles ont été corrigés : numéro de page affiché avant le chargement de ses lignes et disposition mobile de la liste clients. Le test d'aperçu avec cookies supprimés reste réussi après ces migrations. Voir [ANNUAIRE_CLIENTS](ANNUAIRE_CLIENTS.md).
+
+Ce lot ne modifie pas les règles financières ni les attributions de rôles. La recherche clients n'a plus la fenêtre de 2 000/100 du lot précédent ; le planning garde sa limite de 500 entrées. Les anciennes vérifications ci-dessous sont conservées comme historique.
+
+---
+
 # Refonte des sessions et de l’aperçu intégré — 25 octobre 2026
 
 Refonte du service d’authentification et de l’écran de connexion. Base PGlite directe sans serveur TCP, isolation transactionnelle en aperçu, commande dédiée `npm run preview`, session limitée à l’onglet pour les iframes bloquant les cookies, contrôle de session avant ouverture du CRM, codes d’erreur structurés, changement de mot de passe et récupération opérateur.

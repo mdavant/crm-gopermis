@@ -37,6 +37,10 @@ Connexion → client → prestation → réservation confirmée avec véhicule/m
 
 Les nouvelles permissions sont réservées à `technical_admin`, sans extension silencieuse des droits métier/moniteur. La matrice organisationnelle reste à approuver. Voir [le fonctionnement et les limites des réservations](docs/RESERVATIONS.md).
 
+## Annuaire et suivi administratif
+
+Recherche SQL paginée sur toutes les fiches, filtre par statut, coordonnées modifiables avec contrôle de version et audit. Le planning global se filtre par journée parisienne ; l'historique client reste disponible. Les migrations 004/005 sont appliquées automatiquement en aperçu. En PostgreSQL, exécuter `npm run db:migrate` avec l'environnement sécurisé avant le démarrage de cette version. Voir [Annuaire clients](docs/ANNUAIRE_CLIENTS.md).
+
 ## Vérification
 
 ```bash

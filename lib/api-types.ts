@@ -1,3 +1,4 @@
+import { readApiResponse } from "./http";
 import type { Offer, Rate } from "../domain/pricing";
 export type User = { id: string; name: string; permissions: string[] };
 export type Catalog = {
@@ -53,13 +54,15 @@ export type Detail = {
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch("/api/" + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    headers:
+      body === undefined
+        ? { Accept: "application/json" }
+        : { Accept: "application/json", "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error ?? "Erreur de connexion");
-  return data;
+  return readApiResponse<T>(r);
 }
 export type Booking = {
   id: string;

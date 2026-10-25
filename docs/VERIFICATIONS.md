@@ -1,3 +1,15 @@
+# Correctif connexion — 25 octobre 2026
+
+Reprise du commit GitHub `49fc411` (identifiant + PGlite). Connexion par identifiant conservée. Suppression des mots de passe embarqués, du formulaire prérempli, de la réinitialisation des comptes et des données fictives automatiques ; base d'aperçu persistante, initialisation par formulaire en aperçu privé, verrouillage transactionnel du premier compte, erreurs HTML/JSON distinguées, vérification d'origine stricte et lockfile restauré.
+
+Contrôles du correctif : typecheck et lint réussis ; 13 tests unitaires réussis (dont gestion HTML, JSON et hash invalide) ; build normal réussi ; scénario HTTP d'aperçu réussi avec redémarrage, compte/session conservés et base PostgreSQL indisponible sans repli ; suites HTTP PGlite et PostgreSQL natif avec concurrence/restauration réussies ; navigateur métier desktop/mobile réussi ; audit complet 0 vulnérabilité. Les détails et la commande de test navigateur du premier compte sont dans [CONNEXION](CONNEXION.md).
+
+Ces vérifications concernent le code exécuté ici. La synchronisation et l'exécution dans la session AI Studio du responsable métier ne sont pas directement accessibles à cet environnement.
+
+---
+
+## Vérifications du lot V3 précédent
+
 # Vérifications de la reprise 0.3 — 25 octobre 2026
 
 Ces résultats ont été obtenus dans l'environnement cloud actuel, à partir de l'archive V2. Ils remplacent le compte rendu de l'ancien environnement Work. Aucun client ni secret de production utilisé.

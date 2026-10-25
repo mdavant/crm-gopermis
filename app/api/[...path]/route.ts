@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { verifyPassword } from "../../../server/accounts.mjs";
 import { z, ZodError } from "zod";
 import { db } from "../../../server/db";
 import {
@@ -29,6 +30,7 @@ import {
   createBooking,
   completeBooking,
 } from "../../../server/scheduling";
+import { setupStatus, setupAccount } from "../../../server/setup";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handle(
@@ -50,20 +52,18 @@ async function handle(
         throw new HttpError(400, "JSON invalide");
       }
     };
+    if (route === "setup")
+      return NextResponse.json(
+        isPost ? await setupAccount(await json()) : await setupStatus(),
+        { status: isPost ? 201 : 200 },
+      );
     if (route === "login" && isPost) {
-      const body = await json();
-      const rawIdentifier =
-        body.identifiant || body.username || body.email;
+      const body = z.record(z.string(), z.unknown()).parse(await json());
+      const rawIdentifier = body.identifiant || body.username || body.email;
       const x = z
         .object({
-          identifiant: z
-            .string()
-            .min(1, "Identifiant requis")
-            .max(254),
-          password: z
-            .string()
-            .min(1, "Mot de passe requis")
-            .max(256),
+          identifiant: z.string().trim().min(1, "Identifiant requis").max(254),
+          password: z.string().min(1, "Mot de passe requis").max(256),
         })
         .parse({
           identifiant: typeof rawIdentifier === "string" ? rawIdentifier : "",
@@ -75,7 +75,7 @@ async function handle(
         `INSERT INTO login_attempt(key,attempts) VALUES($1,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN 1 ELSE login_attempt.attempts+1 END,window_start=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN now() ELSE login_attempt.window_start END RETURNING attempts`,
         [key],
       );
-      if (attempt.rows[0].attempts > 20)
+      if (attempt.rows[0].attempts > 10)
         throw new HttpError(
           429,
           "Trop de tentatives. Réessayez dans 15 minutes.",
@@ -85,12 +85,7 @@ async function handle(
         [identifier],
       );
       const u = found.rows[0];
-      const [salt, hash] = (
-        u?.password_hash ??
-        "00000000000000000000000000000000:" + "0".repeat(128)
-      ).split(":");
-      const computed = scryptSync(x.password, salt, 64);
-      if (!timingSafeEqual(computed, Buffer.from(hash, "hex")) || !u)
+      if (!verifyPassword(x.password, u?.password_hash) || !u)
         throw new HttpError(401, "Identifiants incorrects");
       const token = randomBytes(32).toString("hex");
       await db().query(

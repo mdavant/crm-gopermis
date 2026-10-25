@@ -28,6 +28,7 @@ const money = (n: number) =>
 export default function Home() {
   const [user, setUser] = useState<User | null>(null),
     [loading, setLoading] = useState(true),
+    [setupRequired, setSetupRequired] = useState(false),
     [error, setError] = useState(""),
     [rows, setRows] = useState<ClientRecord[]>([]),
     [cat, setCat] = useState<Catalog | null>(null),
@@ -39,24 +40,40 @@ export default function Home() {
     [busy, setBusy] = useState(false);
   const can = (p: string) => user?.permissions.includes(p) ?? false;
   const refresh = useCallback(async () => {
-    const [u, c, list] = await Promise.all([
-      api<User>("me"),
+    const u = await api<User>("me");
+    setUser(u);
+    if (!u.permissions.includes("clients.read")) {
+      setRows([]);
+      setCat(null);
+      return;
+    }
+    const [c, list] = await Promise.all([
       api<Catalog>("catalog"),
       api<ClientRecord[]>("clients"),
     ]);
-    setUser(u);
     setCat(c);
     setRows(list);
   }, []);
   useEffect(() => {
     refresh()
-      .catch((e) => {
-        if (e.message !== "Connexion requise") setError(e.message);
+      .catch(async (e) => {
+        if (
+          e.message === "Connexion requise" ||
+          e.message === "Session expirée"
+        ) {
+          try {
+            setSetupRequired(
+              (await api<{ required: boolean }>("setup")).required,
+            );
+          } catch (error) {
+            setError((error as Error).message);
+          }
+        } else setError(e.message);
       })
       .finally(() => setLoading(false));
   }, [refresh]);
   useEffect(() => {
-    if (!user) return;
+    if (!user || !user.permissions.includes("clients.read")) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       api<ClientRecord[]>("clients?q=" + encodeURIComponent(q))
@@ -90,7 +107,12 @@ export default function Home() {
     setBusy(true);
     setError("");
     try {
-      await api("login", Object.fromEntries(f));
+      const values = Object.fromEntries(f);
+      if (setupRequired) {
+        await api("setup", values);
+        setSetupRequired(false);
+      }
+      await api("login", values);
       await refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -110,12 +132,27 @@ export default function Home() {
         <form className="card" onSubmit={login}>
           <div className="brandMark">G</div>
           <p className="eyebrow">GOPERMIS · ESPACE ÉQUIPE</p>
-          <h1>Bienvenue.</h1>
-          <p>Connectez-vous à votre espace de travail.</p>
+          <h1>{setupRequired ? "Créer votre accès." : "Bienvenue."}</h1>
+          <p>
+            {setupRequired
+              ? "Premier lancement de l’aperçu privé : créez votre compte administrateur. Aucun mot de passe par défaut."
+              : "Connectez-vous à votre espace de travail."}
+          </p>
           {error && (
             <p role="alert" className="error">
               {error}
             </p>
+          )}
+          {setupRequired && (
+            <label>
+              Nom affiché
+              <input
+                name="name"
+                required
+                maxLength={150}
+                defaultValue="Administrateur GoPermis"
+              />
+            </label>
           )}
           <label>
             Identifiant
@@ -124,7 +161,6 @@ export default function Home() {
               type="text"
               autoComplete="username"
               placeholder="ex: admin"
-              defaultValue="admin"
               required
             />
           </label>
@@ -133,34 +169,20 @@ export default function Home() {
             <input
               name="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={setupRequired ? "new-password" : "current-password"}
+              minLength={setupRequired ? 14 : 1}
+              maxLength={256}
               placeholder="••••••••••••••••"
-              defaultValue="GoPermis2026!Admin"
               required
             />
           </label>
           <button className="primary" disabled={busy}>
-            {busy ? "Connexion…" : "Se connecter"}
+            {busy
+              ? "Connexion…"
+              : setupRequired
+                ? "Créer mon compte et me connecter"
+                : "Se connecter"}
           </button>
-          <div
-            style={{
-              marginTop: 14,
-              padding: "10px 12px",
-              background: "#fff7ed",
-              border: "1px solid #fed7aa",
-              borderRadius: 8,
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "#9a3412",
-              textAlign: "left",
-            }}
-          >
-            <strong>Accès administrateur complet :</strong>
-            <br />
-            Identifiant : <strong>admin</strong>
-            <br />
-            Mot de passe : <strong>GoPermis2026!Admin</strong>
-          </div>
           <small>Accès réservé aux comptes créés par un administrateur.</small>
         </form>
       </div>
@@ -277,7 +299,17 @@ export default function Home() {
             </div>
           )}
           {busy && <p role="status">Chargement…</p>}
+          {view === "Clients" && !can("clients.read") && (
+            <section className="card">
+              <h1>Connexion réussie</h1>
+              <p>
+                Votre compte n’a pas encore de droit d’accès aux dossiers
+                clients. Contactez l’administrateur.
+              </p>
+            </section>
+          )}
           {view === "Clients" &&
+            can("clients.read") &&
             (detail && cat ? (
               <ClientDetail
                 detail={detail}

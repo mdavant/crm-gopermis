@@ -2,6 +2,10 @@
 
 CRM Next.js / React / TypeScript / PostgreSQL. Clients → plusieurs prestations → plusieurs séances, prix acceptés immuables, paiements déjà reçus, journal d'heures et audit. Aucun client de production, véhicule réel supposé ou moniteur réel n'est fourni.
 
+## Aperçu AI Studio et connexion
+
+Pour travailler sur l'interface : `npm ci`, puis `npm run dev`. Sans URL PostgreSQL configurée, l'aperçu de développement utilise une base PGlite persistante. Au premier lancement sans compte, créer l'accès administrateur depuis le formulaire « Créer votre accès ». Aucun mot de passe par défaut n'est livré. Les comptes existants ne sont jamais réinitialisés au démarrage. Voir [Connexion et aperçu](docs/CONNEXION.md) pour la configuration, la persistance et les vérifications.
+
 ## Développement
 
 Node 24, npm et PostgreSQL 17. Utiliser le checkout existant ; chaque tâche cloud est déjà isolée, pas de worktree supplémentaire nécessaire.
@@ -17,7 +21,7 @@ npm run dev -- --hostname 0.0.0.0
 
 Pour une base existante, copier `.env.example` vers `.env.local` sans écraser de configuration, renseigner `DATABASE_URL` et `APP_ORIGIN`. Ne pas utiliser `dev:db` pour gérer une base personnalisée. Les scripts Node nécessitent explicitement `--env-file=.env.local` ; Next le charge lui-même.
 
-Aucun compte par défaut. Fournir **localement** `BOOTSTRAP_EMAIL`, `BOOTSTRAP_NAME`, `BOOTSTRAP_PASSWORD` (secret unique de 14 caractères minimum) puis lancer :
+Aucun compte par défaut. Pour PostgreSQL, fournir **localement** `BOOTSTRAP_IDENTIFIER` (ou `BOOTSTRAP_EMAIL`), `BOOTSTRAP_NAME`, `BOOTSTRAP_PASSWORD` (secret unique de 14 caractères minimum) puis lancer :
 
 ```bash
 node --env-file=.env.local scripts/create-user.mjs

@@ -28,7 +28,7 @@ async function run(args, extra = {}) {
 }
 await run(["scripts/migrate.mjs"]);
 await run(["scripts/create-user.mjs"], {
-  BOOTSTRAP_EMAIL: "browser@example.test",
+  BOOTSTRAP_IDENTIFIER: "browser-admin",
   BOOTSTRAP_NAME: "TEST Navigateur",
   BOOTSTRAP_PASSWORD: password,
 });
@@ -75,7 +75,8 @@ try {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(origin);
-  await page.getByLabel("Email", { exact: true }).fill("browser@example.test");
+  await page.getByLabel("Identifiant", { exact: true }).fill("browser-admin");
+  assert.equal(await page.getByLabel("Mot de passe").inputValue(), "");
   await page.getByLabel("Mot de passe").fill(password);
   await page.getByRole("button", { name: "Se connecter", exact: true }).click();
   await page.getByRole("heading", { name: "Clients", exact: true }).waitFor();

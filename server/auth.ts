@@ -31,17 +31,9 @@ export async function requireUser(permission?: string) {
 }
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin) return;
-  const requestOrigin = new URL(request.url).origin;
-  const isLocalhost =
-    origin.startsWith("http://localhost:") ||
-    origin.startsWith("http://127.0.0.1:");
-  if (
-    origin === requestOrigin ||
-    isLocalhost ||
-    (process.env.APP_ORIGIN && origin === process.env.APP_ORIGIN)
-  ) {
-    return;
-  }
-  throw new HttpError(403, "Origine refusée");
+  // Match the explicit public origin behind a proxy, or the exact request origin
+  // for a same-origin preview. No wildcard localhost or missing-Origin bypass.
+  const expected = process.env.APP_ORIGIN || new URL(request.url).origin;
+  if (!origin || origin !== expected)
+    throw new HttpError(403, "Origine refusée");
 }

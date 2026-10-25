@@ -118,8 +118,15 @@ export default function Home() {
             </p>
           )}
           <label>
-            Email
-            <input name="email" type="email" autoComplete="username" required />
+            Identifiant
+            <input
+              name="identifiant"
+              type="text"
+              autoComplete="username"
+              placeholder="ex: admin"
+              defaultValue="admin"
+              required
+            />
           </label>
           <label>
             Mot de passe
@@ -127,12 +134,33 @@ export default function Home() {
               name="password"
               type="password"
               autoComplete="current-password"
+              placeholder="••••••••••••••••"
+              defaultValue="GoPermis2026!Admin"
               required
             />
           </label>
           <button className="primary" disabled={busy}>
             {busy ? "Connexion…" : "Se connecter"}
           </button>
+          <div
+            style={{
+              marginTop: 14,
+              padding: "10px 12px",
+              background: "#fff7ed",
+              border: "1px solid #fed7aa",
+              borderRadius: 8,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "#9a3412",
+              textAlign: "left",
+            }}
+          >
+            <strong>Accès administrateur complet :</strong>
+            <br />
+            Identifiant : <strong>admin</strong>
+            <br />
+            Mot de passe : <strong>GoPermis2026!Admin</strong>
+          </div>
           <small>Accès réservé aux comptes créés par un administrateur.</small>
         </form>
       </div>

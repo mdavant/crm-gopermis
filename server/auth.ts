@@ -30,9 +30,18 @@ export async function requireUser(permission?: string) {
   return { ...user, permissions };
 }
 export function checkOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return;
+  const requestOrigin = new URL(request.url).origin;
+  const isLocalhost =
+    origin.startsWith("http://localhost:") ||
+    origin.startsWith("http://127.0.0.1:");
   if (
-    !process.env.APP_ORIGIN ||
-    request.headers.get("origin") !== process.env.APP_ORIGIN
-  )
-    throw new HttpError(403, "Origine refusée");
+    origin === requestOrigin ||
+    isLocalhost ||
+    (process.env.APP_ORIGIN && origin === process.env.APP_ORIGIN)
+  ) {
+    return;
+  }
+  throw new HttpError(403, "Origine refusée");
 }

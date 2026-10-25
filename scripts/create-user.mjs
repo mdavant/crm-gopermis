@@ -1,16 +1,16 @@
 import pg from "pg";
 import { scryptSync, randomBytes } from "node:crypto";
-const { DATABASE_URL, BOOTSTRAP_EMAIL, BOOTSTRAP_PASSWORD, BOOTSTRAP_NAME } =
-  process.env;
+const identifier = process.env.BOOTSTRAP_IDENTIFIER || process.env.BOOTSTRAP_EMAIL;
+const { DATABASE_URL, BOOTSTRAP_PASSWORD, BOOTSTRAP_NAME } = process.env;
 if (
   !DATABASE_URL ||
-  !BOOTSTRAP_EMAIL ||
+  !identifier ||
   !BOOTSTRAP_NAME ||
   !BOOTSTRAP_PASSWORD ||
   BOOTSTRAP_PASSWORD.length < 14
 )
   throw Error(
-    "Définir DATABASE_URL, BOOTSTRAP_EMAIL, BOOTSTRAP_NAME et BOOTSTRAP_PASSWORD (14 caractères minimum)",
+    "Définir DATABASE_URL, BOOTSTRAP_IDENTIFIER (ou BOOTSTRAP_EMAIL), BOOTSTRAP_NAME et BOOTSTRAP_PASSWORD (14 caractères minimum)",
   );
 const salt = randomBytes(16).toString("hex");
 const hash =
@@ -20,10 +20,10 @@ await c.connect();
 try {
   await c.query("BEGIN");
   const u = await c.query(
-    "INSERT INTO app_user(email,name,password_hash) VALUES($1,$2,$3) RETURNING id",
-    [BOOTSTRAP_EMAIL.toLowerCase(), BOOTSTRAP_NAME, hash],
+    "INSERT INTO app_user(email,name,password_hash) VALUES($1,$2,$3) ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash, active=true RETURNING id",
+    [identifier.toLowerCase(), BOOTSTRAP_NAME, hash],
   );
-  await c.query("INSERT INTO user_role VALUES($1,'technical_admin')", [
+  await c.query("INSERT INTO user_role VALUES($1,'technical_admin') ON CONFLICT DO NOTHING", [
     u.rows[0].id,
   ]);
   await c.query("COMMIT");

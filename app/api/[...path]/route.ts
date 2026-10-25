@@ -51,25 +51,38 @@ async function handle(
       }
     };
     if (route === "login" && isPost) {
+      const body = await json();
+      const rawIdentifier =
+        body.identifiant || body.username || body.email;
       const x = z
         .object({
-          email: z.email().max(254),
-          password: z.string().min(1).max(256),
+          identifiant: z
+            .string()
+            .min(1, "Identifiant requis")
+            .max(254),
+          password: z
+            .string()
+            .min(1, "Mot de passe requis")
+            .max(256),
         })
-        .parse(await json());
-      const key = digest(x.email.toLowerCase());
+        .parse({
+          identifiant: typeof rawIdentifier === "string" ? rawIdentifier : "",
+          password: body.password,
+        });
+      const identifier = x.identifiant.trim().toLowerCase();
+      const key = digest(identifier);
       const attempt = await db().query(
         `INSERT INTO login_attempt(key,attempts) VALUES($1,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN 1 ELSE login_attempt.attempts+1 END,window_start=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN now() ELSE login_attempt.window_start END RETURNING attempts`,
         [key],
       );
-      if (attempt.rows[0].attempts > 10)
+      if (attempt.rows[0].attempts > 20)
         throw new HttpError(
           429,
           "Trop de tentatives. Réessayez dans 15 minutes.",
         );
       const found = await db().query(
-        "SELECT * FROM app_user WHERE email=$1 AND active",
-        [x.email.toLowerCase()],
+        "SELECT * FROM app_user WHERE lower(email)=$1 AND active",
+        [identifier],
       );
       const u = found.rows[0];
       const [salt, hash] = (
@@ -235,13 +248,12 @@ async function handle(
       );
     if (e instanceof HttpError)
       return NextResponse.json({ error: e.message }, { status: e.status });
-    console.error("API failure", {
-      type: e instanceof Error ? e.name : "Unknown",
-    });
+    console.error("API failure:", e);
     return NextResponse.json(
       {
         error:
           "Service indisponible. Vérifiez la configuration et la connexion PostgreSQL.",
+        details: e instanceof Error ? e.message : String(e),
       },
       { status: 503 },
     );

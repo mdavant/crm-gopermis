@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -18,6 +18,8 @@
     "dev:db": "node scripts/dev-db.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
     "lucide-react": "^0.468.0",
     "next": "^15.5.28",
     "pg": "^8.23.1",
@@ -26,8 +28,6 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.11",
-    "@electric-sql/pglite-socket": "^0.2.14",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.0.3",

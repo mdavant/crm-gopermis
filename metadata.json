@@ -1,0 +1,8 @@
+{
+  "name": "GoPermis CRM",
+  "description": "Espace administratif et CRM GoPermis pour la gestion des clients, plannings, véhicules et moniteurs.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

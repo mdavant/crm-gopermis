@@ -141,6 +141,40 @@ export async function archiveResource(raw: unknown, actor: string) {
     return { ok: true };
   });
 }
+export async function updateResource(raw: unknown, actor: string) {
+  const x = z
+    .discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("vehicle"),
+        id: z.uuid(),
+        label: z.string().trim().min(1).max(100),
+        modelId: z.string().min(1).max(80).optional(),
+        active: z.boolean().optional(),
+      }),
+      z.object({
+        kind: z.literal("instructor"),
+        id: z.uuid(),
+        name: z.string().trim().min(1).max(150),
+        active: z.boolean().optional(),
+      }),
+    ])
+    .parse(raw);
+  return transaction(async (c) => {
+    if (x.kind === "vehicle") {
+      await c.query(
+        "UPDATE vehicle SET label = $1, model_id = COALESCE($2, model_id), active = COALESCE($3, active) WHERE id = $4",
+        [x.label, x.modelId ?? null, x.active !== undefined ? x.active : null, x.id]
+      );
+    } else {
+      await c.query(
+        "UPDATE instructor SET name = $1, active = COALESCE($2, active) WHERE id = $3",
+        [x.name, x.active !== undefined ? x.active : null, x.id]
+      );
+    }
+    await audit(c, actor, "resource.updated", x.id, { kind: x.kind });
+    return { ok: true };
+  });
+}
 export async function createBlock(raw: unknown, actor: string) {
   const x = interval
     .extend({

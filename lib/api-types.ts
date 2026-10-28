@@ -1,5 +1,3 @@
-import { previewToken, clearPreviewSession } from "./session";
-import { ApiError } from "./http";
 import { readApiResponse } from "./http";
 import type { Offer, Rate } from "../domain/pricing";
 export type User = { id: string; name: string; permissions: string[] };
@@ -18,15 +16,6 @@ export type ClientRecord = {
   status: string;
   source: string;
   created_at: string;
-  version: number;
-  updated_at: string;
-};
-export type ClientPage = {
-  items: ClientRecord[];
-  total: number;
-  page: number;
-  pageSize: number;
-  pages: number;
 };
 export type ServiceRecord = {
   id: string;
@@ -63,42 +52,45 @@ export type Detail = {
   history: { action: string; actor: string; created_at: string }[];
 };
 export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const token = previewToken();
-  let r: Response;
-  try {
-    r = await fetch("/api/" + path, {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(token ? { Authorization: "Bearer " + token } : {}),
-      },
-      credentials: "same-origin",
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(45000),
-    });
-  } catch {
-    throw new ApiError(
-      "Le serveur ne répond pas. Réessayez avec le bouton Actualiser la connexion.",
-      0,
-      "NETWORK_UNAVAILABLE",
-    );
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("gopermis_session")
+      : null;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
   }
-  try {
-    return await readApiResponse<T>(r);
-  } catch (e) {
-    if (
-      e instanceof ApiError &&
-      ["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(e.code)
-    ) {
-      clearPreviewSession();
-      window.dispatchEvent(
-        new CustomEvent("gopermis-session-expired", { detail: e.message }),
-      );
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+    headers["x-session-token"] = token;
+  }
+  const r = await fetch("/api/" + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers,
+    credentials: "same-origin",
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  const data = await readApiResponse<T>(r);
+  if (
+    path === "login" &&
+    data &&
+    typeof data === "object" &&
+    "token" in data &&
+    typeof data.token === "string"
+  ) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("gopermis_session", data.token);
     }
-    throw e;
   }
+  if (path === "logout") {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("gopermis_session");
+    }
+  }
+  return data;
 }
 export type Booking = {
   id: string;
@@ -136,11 +128,4 @@ export type Resources = {
     client_name: string;
   }[];
   creditPolicy: "reserve_credit" | "credit_on_completion" | null;
-};
-
-export type HomeStats = {
-  totalClients: number;
-  todayBookingsCount: number;
-  todayMinutes: number;
-  todayHours: number;
 };

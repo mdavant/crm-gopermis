@@ -25,7 +25,7 @@ export function CalendarSidebar({
   onSelectDate,
   activeFilters,
   onToggleFilter,
-  stats = { manualVehicles: 18, autoVehicles: 12, exams: 6 },
+  stats = { manualVehicles: 0, autoVehicles: 0, exams: 0 },
 }: CalendarSidebarProps) {
   // Navigation for the mini calendar
   const [viewMonth, setViewMonth] = useState<Date>(
@@ -34,7 +34,7 @@ export function CalendarSidebar({
 
   // Accordion open/closed states
   const [scheduleOpen, setScheduleOpen] = useState(true);
-  const [categoriesOpen, setCategoriesOpen] = useState(true);
+  const [categoriesOpen, setRessourcesOpen] = useState(true);
 
   // Mini calendar navigation
   const prevMonth = () => {
@@ -88,25 +88,21 @@ export function CalendarSidebar({
   const monthLabel = viewMonth.toLocaleString("en-US", { month: "long" });
 
   const filterOptions = [
-    { id: "standup", label: "Daily Standup" },
-    { id: "review", label: "Weekly Review" },
-    { id: "meeting", label: "Team Meeting" },
-    { id: "break", label: "Lunch Break" },
-    { id: "client", label: "Client Meeting" },
-    { id: "other", label: "Other" },
+    {id:"confirmed",label:"Séances confirmées"},
+    {id:"completed",label:"Séances réalisées"},
   ];
 
   return (
     <aside className="calendarSubPanel">
-      {/* Top All Calendar Widget */}
+      {/* Top Planning GoPermis Widget */}
       <div className="allCalendarWidget">
         <div className="calendarTileIcon">
           <div className="tileRedHeader" />
           <span className="tileDayText">31</span>
         </div>
         <div className="calendarWidgetText">
-          <strong className="widgetTitle">All Calendar</strong>
-          <span className="widgetSub">Personal, Teams</span>
+          <strong className="widgetTitle">Planning GoPermis</strong>
+          <span className="widgetSub">Séances de conduite</span>
         </div>
         <ChevronDown size={17} className="widgetChevron" />
       </div>
@@ -172,14 +168,14 @@ export function CalendarSidebar({
 
       <div className="subPanelDivider" />
 
-      {/* My Schedule Checklist */}
+      {/* Statuts Checklist */}
       <div className="subSection">
         <button
           type="button"
           className="sectionHeaderToggle"
           onClick={() => setScheduleOpen(!scheduleOpen)}
         >
-          <span className="sectionHeading">My Schedule</span>
+          <span className="sectionHeading">Statuts</span>
           {scheduleOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
@@ -208,14 +204,14 @@ export function CalendarSidebar({
 
       <div className="subPanelDivider" />
 
-      {/* Categories Section */}
+      {/* Ressources Section */}
       <div className="subSection">
         <button
           type="button"
           className="sectionHeaderToggle"
-          onClick={() => setCategoriesOpen(!categoriesOpen)}
+          onClick={() => setRessourcesOpen(!categoriesOpen)}
         >
-          <span className="sectionHeading">Categories</span>
+          <span className="sectionHeading">Ressources</span>
           {categoriesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
@@ -223,23 +219,23 @@ export function CalendarSidebar({
           <div className="categoriesList">
             <div className="categoryRow">
               <span className="catDot" style={{ backgroundColor: "#ef4444" }} />
-              <span className="catName">Work</span>
-              <span className="catCountPill">{stats.manualVehicles ?? 18}</span>
+              <span className="catName">Manuelles</span>
+              <span className="catCountPill">{stats.manualVehicles ?? 0}</span>
             </div>
             <div className="categoryRow">
               <span className="catDot" style={{ backgroundColor: "#22c55e" }} />
-              <span className="catName">Personal</span>
-              <span className="catCountPill">{stats.autoVehicles ?? 9}</span>
+              <span className="catName">Automatiques</span>
+              <span className="catCountPill">{stats.autoVehicles ?? 0}</span>
             </div>
             <div className="categoryRow">
               <span className="catDot" style={{ backgroundColor: "#f59e0b" }} />
-              <span className="catName">Breaks</span>
-              <span className="catCountPill">13</span>
+              <span className="catName">Indisponibilités</span>
+              <span className="catCountPill">—</span>
             </div>
             <div className="categoryRow">
               <span className="catDot" style={{ backgroundColor: "#0284c7" }} />
-              <span className="catName">Events</span>
-              <span className="catCountPill">{stats.exams ?? 4}</span>
+              <span className="catName">Examens</span>
+              <span className="catCountPill">{stats.exams ?? "—"}</span>
             </div>
           </div>
         )}

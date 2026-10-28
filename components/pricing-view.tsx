@@ -133,7 +133,7 @@ export function PricingView({ cat, can, onRefresh }: PricingViewProps) {
                       </div>
                       <div className="ratePriceWrap">
                         <span className="ratePriceValue">{money(r.cents)}/h</span>
-                        {can("clients.write") && (
+                        {can("catalog.write") && (
                           <button
                             type="button"
                             className="btnIconTiny"
@@ -181,7 +181,7 @@ export function PricingView({ cat, can, onRefresh }: PricingViewProps) {
                     {o.paidMinutes / 60} h payées + {o.bonusMinutes / 60} h offertes
                   </span>
                 </div>
-                {can("clients.write") && (
+                {can("catalog.write") && (
                   <button
                     type="button"
                     className="btnIconTiny"

@@ -12,10 +12,11 @@ import {
   UserCheck,
   Sparkles,
 } from "lucide-react";
-import type { Booking, ClientRecord, Resources, User } from "../lib/api-types";
+import type { Booking, ClientRecord, Resources, User, HomeStats } from "../lib/api-types";
 
 interface DashboardProps {
   user: User;
+  summary:HomeStats|null;
   clients: ClientRecord[];
   bookings: Booking[];
   resources: Resources | null;
@@ -26,6 +27,7 @@ interface DashboardProps {
 
 export function Dashboard({
   user,
+  summary,
   clients,
   bookings,
   resources,
@@ -89,7 +91,7 @@ export function Dashboard({
               </div>
               <div className="kpiContent">
                 <span className="kpiLabel">Élèves enregistrés</span>
-                <strong className="kpiValue">{clients.length}</strong>
+                <strong className="kpiValue">{summary?.totalClients ?? "—"}</strong>
                 <span className="kpiHint">Gérer les dossiers &gt;</span>
               </div>
             </div>
@@ -100,7 +102,7 @@ export function Dashboard({
               </div>
               <div className="kpiContent">
                 <span className="kpiLabel">Séances aujourd&apos;hui</span>
-                <strong className="kpiValue">{todayBookings.length}</strong>
+                <strong className="kpiValue">{summary?.todayBookingsCount ?? "—"}</strong>
                 <span className="kpiHint">Voir le calendrier &gt;</span>
               </div>
             </div>
@@ -133,7 +135,7 @@ export function Dashboard({
             <div className="sectionCardHeader">
               <div className="sectionTitleWithBadge">
                 <h3 className="sectionCardTitle">Actions & Alertes prioritaires</h3>
-                <span className="badgeNeutral">3 à traiter</span>
+                <span className="badgeNeutral">Raccourcis</span>
               </div>
             </div>
 
@@ -144,7 +146,7 @@ export function Dashboard({
                 </div>
                 <div className="priorityContent">
                   <strong>Compléter les dossiers élèves</strong>
-                  <p>2 élèves inscrits n&apos;ont pas encore de numéro NEPH ou de forfait associé.</p>
+                  <p>Consultez les fiches clients et leurs prestations.</p>
                 </div>
                 <button
                   type="button"
@@ -178,7 +180,7 @@ export function Dashboard({
                 </div>
                 <div className="priorityContent">
                   <strong>Contrôle de disponibilité flotte</strong>
-                  <p>Audi RS3 et Clio vérifiées prêtes pour les évaluations et sessions sur piste.</p>
+                  <p>Consultez les véhicules et leurs indisponibilités avant de réserver.</p>
                 </div>
                 <button
                   type="button"

@@ -220,14 +220,14 @@ export async function updateCatalog(raw: unknown, actor: string) {
     .discriminatedUnion("kind", [
       z.object({
         kind: z.literal("rate"),
-        id: z.union([z.string(), z.number()]),
+        id: z.uuid(),
         cents: z.number().int().min(100),
       }),
       z.object({
         kind: z.literal("offer"),
         id: z.string(),
         label: z.string().trim().min(1).max(100),
-        paidMinutes: z.number().int().min(0),
+        paidMinutes: z.number().int().min(1),
         bonusMinutes: z.number().int().min(0),
       }),
     ])
@@ -235,17 +235,19 @@ export async function updateCatalog(raw: unknown, actor: string) {
 
   return transaction(async (c) => {
     if (x.kind === "rate") {
-      await c.query("UPDATE tariff_version SET cents = $1 WHERE id = $2", [
+      const updated=await c.query("UPDATE tariff_version SET cents = $1 WHERE id = $2 RETURNING id", [
         x.cents,
         x.id,
       ]);
+      if(!updated.rowCount) throw new HttpError(404,"Tarif introuvable");
     } else {
-      await c.query(
-        "UPDATE offer SET label = $1, paid_minutes = $2, bonus_minutes = $3 WHERE id = $4",
+      const updated=await c.query(
+        "UPDATE offer SET label = $1, paid_minutes = $2, bonus_minutes = $3 WHERE id = $4 RETURNING id",
         [x.label, x.paidMinutes, x.bonusMinutes, x.id],
       );
+      if(!updated.rowCount) throw new HttpError(404,"Offre introuvable");
     }
-    await audit(c, actor, "catalog.updated", String(x.id), { kind: x.kind });
+    await audit(c, actor, "catalog.updated", actor, { kind: x.kind, catalogId:x.id });
     return { ok: true };
   });
 }
@@ -253,12 +255,8 @@ export async function updateCatalog(raw: unknown, actor: string) {
 export async function deleteClient(id: string, actor: string) {
   const validId = z.string().uuid().parse(id);
   return transaction(async (c) => {
-    await c.query("DELETE FROM calendar_occupancy WHERE client_id = $1", [validId]);
-    await c.query("DELETE FROM booking WHERE client_id = $1", [validId]);
-    await c.query("DELETE FROM client_service WHERE client_id = $1", [validId]);
-    await c.query("DELETE FROM note WHERE client_id = $1", [validId]);
-    await c.query("DELETE FROM client WHERE id = $1", [validId]);
-    await audit(c, actor, "client.deleted", validId);
+    const result=await c.query("UPDATE client SET status='Archivé',version=version+1,updated_at=now() WHERE id=$1 AND status<>'Archivé' RETURNING id",[validId]);
+    if(result.rowCount) await audit(c,actor,"client.archived",validId);
     return { ok: true };
   });
 }

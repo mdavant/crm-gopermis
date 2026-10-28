@@ -74,6 +74,7 @@ export function Schedule({
   reload,
   selectedDate,
   onDateChange,
+  activeFilters,
 }: {
   can: (p: string) => boolean;
   detail?: Detail;
@@ -243,7 +244,7 @@ export function Schedule({
   ];
 
   // Real bookings only! No fabricated dummy sessions!
-  const activeBookings = rows;
+  const activeBookings = activeFilters ? rows.filter(b => activeFilters.includes(b.status)) : rows;
 
   // Month and year display
   const monthName = currentDate.toLocaleString("fr-FR", { month: "long" });
@@ -353,7 +354,7 @@ export function Schedule({
 
               <div className="eventCountBadge">
                 <CalendarDays size={15} />
-                <span>{activeBookings.length} event&apos;s</span>
+                <span>{activeBookings.length} séances chargées</span>
               </div>
             </div>
           </div>
@@ -363,10 +364,10 @@ export function Schedule({
             <button
               type="button"
               className="syncGoogleBtn"
-              onClick={() => alert("Synchronisation Google Calendar disponible")}
+              disabled title="Intégration Google Calendar non configurée"
             >
               <div className="googleCalIcon">31</div>
-              <span>Sync to Google Calendar</span>
+              <span>Google Calendar non connecté</span>
             </button>
 
             {/* View Switcher: Day, Week, Month */}
@@ -439,7 +440,7 @@ export function Schedule({
             <thead>
               <tr>
                 <th className="timezoneColHeader">
-                  <span className="tzBadge">UTC +1</span>
+                  <span className="tzBadge">Europe/Paris</span>
                 </th>
                 {weekDays.map((day, idx) => {
                   const dayNum = day.getDate();

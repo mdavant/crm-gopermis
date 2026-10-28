@@ -1,3 +1,21 @@
+# Vérifications du 28 octobre 2026 — stabilisation de 1a1c39e
+
+Exécuté sur le code corrigé, sans changement du CSS :
+
+- `npm run typecheck` : réussi.
+- `npm run lint` : réussi, sans avertissement.
+- `npm test` : 14 tests réussis.
+- `npm run build` : réussi avec Next.js 15.5.28, sans contournement mémoire.
+- `npm run test:integration` : scénario HTTP PGlite réussi, dont audit des offres, profil, archivage sans suppression et ressource absente ajoutés au scénario existant.
+- `npm run test:native` : réussi sur PostgreSQL 17.11 jetable, migrations réexécutées, conflits concurrents et réalisation unique ; pg_dump/pg_restore et protections de l'historique sur une base contenant les mouvements de test.
+- `PREVIEW_BROWSER=1 CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:preview` : réussi, création initiale, cookies supprimés des requêtes, transport de session d'aperçu, rechargement, erreur HTML 502 puis connexion réelle, persistance après redémarrage et refus de fallback PostgreSQL.
+- `CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:browser` : réussi. Nouveau scénario `tests/browser.current.mjs` adapté à l'interface Google : connexion, absence de double barre, création/modification client, navigation des vues, notifications vides, renommage du profil visible à l'accueil, captures desktop/mobile. Le lanceur utilise ce scénario ; l'ancien browser.smoke reste une référence historique non exécutée par cette commande.
+- `npm audit --audit-level=high --json` : zéro vulnérabilité, y compris dépendances de développement.
+
+Les bases, comptes et clients de test sont jetables. Aucune validation de production. Les captures sont dans artifacts/browser (hors Git). Voir [les corrections et limites](CORRECTIONS_2026-10-28.md).
+
+---
+
 # Annuaire et planning — lot suivant la refonte
 
 Migrations 004 (recherche générée + index pg_trgm + versions clients) et 005 (lecture planning) ajoutées. Typage/lint/build réussis, 14 tests unitaires réussis. Scénario HTTP étendu réussi sur PGlite et PostgreSQL natif : plus de 2 000 fiches, pagination/count, accentuation et téléphone, doublons, correction et conservation des prestations/journaux, contrôle de version, créations et modifications concurrentes, filtrage de journée du planning. Migrations réexécutées et restauration native réussies.

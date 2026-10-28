@@ -20,32 +20,7 @@ interface NotificationItem {
 
 export function NotificationsView() {
   const [filter, setFilter] = useState<"all" | "planning" | "dossier" | "vehicule">("all");
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: "notif-1",
-      category: "planning",
-      title: "Séance planifiée",
-      message: "Un nouveau créneau de conduite a été programmé sur Clio V Manuelle.",
-      time: "Il y a 10 min",
-      read: false,
-    },
-    {
-      id: "notif-2",
-      category: "dossier",
-      title: "Dossier élève",
-      message: "Pensez à vérifier les justificatifs d'identité et le mandat pour la préfecture.",
-      time: "Il y a 2 heures",
-      read: false,
-    },
-    {
-      id: "notif-3",
-      category: "vehicule",
-      title: "Flotte GoPermis prête",
-      message: "Audi RS3 et Clio vérifiées prêtes pour les évaluations et leçons.",
-      time: "Aujourd'hui, 08:30",
-      read: true,
-    },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const markAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));

@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { randomBytes } from "node:crypto";
-import { verifyPassword, hashPassword } from "../../../server/accounts.mjs";
+import { authenticationStatus, loginAccount, registerAccount, logoutAccount, changePassword } from "../../../server/authentication";
+import { listClients, createClient, searchClients, updateClient } from "../../../server/clients";
 import { z, ZodError } from "zod";
-import { db } from "../../../server/db";
 import {
   requireUser,
-  digest,
   HttpError,
   checkOrigin,
 } from "../../../server/auth";
 import {
   catalog,
-  listClients,
-  createClient,
   detail,
   createService,
   recordPayment,
@@ -24,6 +19,7 @@ import {
 } from "../../../server/crm";
 import {
   resources,
+  getHomeStats,
   createResource,
   archiveResource,
   updateResource,
@@ -60,115 +56,46 @@ async function handle(
         isPost ? await setupAccount(await json()) : await setupStatus(),
         { status: isPost ? 201 : 200 },
       );
-    if (route === "login" && isPost) {
-      const body = z.record(z.string(), z.unknown()).parse(await json());
-      const rawIdentifier = body.identifiant || body.username || body.email;
-      const x = z
-        .object({
-          identifiant: z.string().trim().min(1, "Identifiant requis").max(254),
-          password: z.string().min(1, "Mot de passe requis").max(256),
-        })
-        .parse({
-          identifiant: typeof rawIdentifier === "string" ? rawIdentifier : "",
-          password: body.password,
-        });
-      const identifier = x.identifiant.trim().toLowerCase();
-      const key = digest(identifier);
-      const attempt = await db().query(
-        `INSERT INTO login_attempt(key,attempts) VALUES($1,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN 1 ELSE login_attempt.attempts+1 END,window_start=CASE WHEN login_attempt.window_start<now()-interval '15 minutes' THEN now() ELSE login_attempt.window_start END RETURNING attempts`,
-        [key],
-      );
-      if (attempt.rows[0].attempts > 10)
-        throw new HttpError(
-          429,
-          "Trop de tentatives. Réessayez dans 15 minutes.",
-        );
-      const found = await db().query(
-        "SELECT * FROM app_user WHERE lower(email)=$1 AND active",
-        [identifier],
-      );
-      const u = found.rows[0];
-      if (!verifyPassword(x.password, u?.password_hash) || !u)
-        throw new HttpError(401, "Identifiants incorrects");
-      const token = randomBytes(32).toString("hex");
-      await db().query(
-        "INSERT INTO auth_session(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",
-        [digest(token), u.id],
-      );
-      (await cookies()).set("gopermis_session", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        path: "/",
-        maxAge: 28800,
-      });
-      const perms = await db().query(
-        "SELECT DISTINCT permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1",
-        [u.id],
-      );
-      const permissions = perms.rows.map((r) => r.permission_id as string);
-      return NextResponse.json({
-        ok: true,
-        token,
-        user: { id: u.id, name: u.name, permissions },
-      });
-    }
-    if (route === "me" && !isPost)
-      return NextResponse.json(await requireUser(undefined, req));
+    if (route === "auth/status" && !isPost) return NextResponse.json(await authenticationStatus());
+    if ((route === "login" || route === "auth/login") && isPost) return NextResponse.json(await loginAccount(await json(), req));
+    if (route === "auth/register" && isPost) return NextResponse.json(await registerAccount(await json(), req), {status:201});
+    if ((route === "logout" || route === "auth/logout") && isPost) return NextResponse.json(await logoutAccount());
+    if (route === "auth/password" && isPost) return NextResponse.json(await changePassword(await json()));
+    if (route === "me" && !isPost) return NextResponse.json(await requireUser());
     if (route === "me/update" && isPost) {
-      const u = await requireUser(undefined, req);
-      const body = z
-        .object({
-          name: z.string().trim().min(1).max(150).optional(),
-          password: z.string().min(8).max(256).optional(),
-        })
-        .parse(await json());
-      if (body.name) {
-        await db().query("UPDATE app_user SET name = $1 WHERE id = $2", [
-          body.name,
-          u.id,
-        ]);
-      }
-      if (body.password) {
-        const hash = hashPassword(body.password);
-        await db().query(
-          "UPDATE app_user SET password_hash = $1 WHERE id = $2",
-          [hash, u.id],
-        );
-      }
-      return NextResponse.json({ ok: true, name: body.name ?? u.name });
+      const u = await requireUser();
+      const body = z.object({ name:z.string().trim().min(1).max(150), password:z.string().min(14).max(256).optional(), currentPassword:z.string().max(256).optional() }).strict().parse(await json());
+      if (body.password) await changePassword({currentPassword:body.currentPassword, newPassword:body.password});
+      await transaction(async c => {
+        await c.query("UPDATE app_user SET name=$1 WHERE id=$2",[body.name,u.id]);
+        await audit(c,u.id,"account.profile_updated",u.id);
+      });
+      return NextResponse.json({ok:true,name:body.name});
     }
-    if (route === "logout" && isPost) {
-      let token = (await cookies()).get("gopermis_session")?.value;
-      if (!token) {
-        const auth = req.headers.get("authorization");
-        if (auth?.startsWith("Bearer ")) token = auth.slice(7).trim();
-        if (!token) token = req.headers.get("x-session-token")?.trim();
-      }
-      if (token)
-        await db().query("DELETE FROM auth_session WHERE token_hash=$1", [
-          digest(token),
-        ]);
-      (await cookies()).delete("gopermis_session");
-      return NextResponse.json({ ok: true });
+    if (route === "clients/search" && !isPost) {
+      await requireUser("clients.read");
+      return NextResponse.json(await searchClients(Object.fromEntries(new URL(req.url).searchParams)));
+    }
+    if (path[0]==="clients" && path[1]!=="delete" && path.length===2 && isPost) {
+      const u=await requireUser("clients.write");
+      return NextResponse.json(await updateClient(path[1],await json(),u.id));
     }
     if (route === "catalog" && !isPost) {
-      await requireUser("clients.read", req);
+      await requireUser("clients.read");
       return NextResponse.json(await catalog());
     }
     if (route === "catalog/update" && isPost) {
-      const u = await requireUser("clients.write", req);
+      const u = await requireUser("catalog.write");
       return NextResponse.json(await updateCatalog(await json(), u.id));
     }
     if (route === "clients/delete" && isPost) {
-      const u = await requireUser("clients.write", req);
+      const u = await requireUser("clients.write");
       const b = z.object({ id: z.string().uuid() }).parse(await json());
       return NextResponse.json(await deleteClient(b.id, u.id));
     }
     if (route === "clients") {
       const u = await requireUser(
         isPost ? "clients.write" : "clients.read",
-        req,
       );
       return NextResponse.json(
         isPost
@@ -178,7 +105,7 @@ async function handle(
       );
     }
     if (path[0] === "clients" && path.length === 2 && !isPost) {
-      const u = await requireUser("clients.read", req);
+      const u = await requireUser("clients.read");
       return NextResponse.json(
         await detail(
           path[1],
@@ -193,7 +120,7 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("services.write", req);
+      const u = await requireUser("services.write");
       return NextResponse.json(
         await createService(path[1], await json(), u.id),
         { status: 201 },
@@ -205,7 +132,7 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("clients.write", req);
+      const u = await requireUser("clients.write");
       const id = z.uuid().parse(path[1]);
       const x = z
         .object({ body: z.string().trim().min(1).max(5000) })
@@ -225,7 +152,7 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("payments.write", req);
+      const u = await requireUser("payments.write");
       return NextResponse.json(
         await recordPayment(path[1], await json(), u.id),
         { status: 201 },
@@ -234,7 +161,6 @@ async function handle(
     if (route === "resources") {
       const u = await requireUser(
         isPost ? "resources.write" : "schedule.read",
-        req,
       );
       return NextResponse.json(
         isPost ? await createResource(await json(), u.id) : await resources(),
@@ -242,15 +168,15 @@ async function handle(
       );
     }
     if (route === "resources/archive" && isPost) {
-      const u = await requireUser("resources.write", req);
+      const u = await requireUser("resources.write");
       return NextResponse.json(await archiveResource(await json(), u.id));
     }
     if (route === "resources/update" && isPost) {
-      const u = await requireUser("resources.write", req);
+      const u = await requireUser("resources.write");
       return NextResponse.json(await updateResource(await json(), u.id));
     }
     if (route === "unavailability" && isPost) {
-      const u = await requireUser("resources.write", req);
+      const u = await requireUser("resources.write");
       return NextResponse.json(await createBlock(await json(), u.id), {
         status: 201,
       });
@@ -261,14 +187,22 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("resources.write", req);
+      const u = await requireUser("resources.write");
       return NextResponse.json(await releaseBlock(path[1], u.id));
     }
+    if (route === "stats/summary" && !isPost) {
+      const u=await requireUser("clients.read");
+      const stats=await getHomeStats();
+      return NextResponse.json(u.permissions.includes("schedule.read") ? stats : {...stats,todayBookingsCount:null,todayMinutes:null,todayHours:null});
+    }
     if (route === "bookings" && !isPost) {
-      await requireUser("schedule.read", req);
+      await requireUser("schedule.read");
       return NextResponse.json(
         await listBookings(
           new URL(req.url).searchParams.get("clientId") ?? undefined,
+          new URL(req.url).searchParams.get("date") ?? undefined,
+          new URL(req.url).searchParams.get("startDate") ?? undefined,
+          new URL(req.url).searchParams.get("endDate") ?? undefined,
         ),
       );
     }
@@ -278,7 +212,7 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("schedule.write", req);
+      const u = await requireUser("schedule.write");
       return NextResponse.json(
         await createBooking(path[1], await json(), u.id),
         { status: 201 },
@@ -290,7 +224,7 @@ async function handle(
       path.length === 3 &&
       isPost
     ) {
-      const u = await requireUser("sessions.complete", req);
+      const u = await requireUser("sessions.complete");
       return NextResponse.json(await completeBooking(path[1], u.id));
     }
     throw new HttpError(404, "Route introuvable");
@@ -301,13 +235,13 @@ async function handle(
         { status: 422 },
       );
     if (e instanceof HttpError)
-      return NextResponse.json({ error: e.message }, { status: e.status });
-    console.error("API failure:", e);
+      return NextResponse.json({ error: e.message, code:e.code }, { status: e.status });
+    console.error("API failure", {type:e instanceof Error?e.name:"Unknown"});
     return NextResponse.json(
       {
         error:
           "Service indisponible. Vérifiez la configuration et la connexion PostgreSQL.",
-        details: e instanceof Error ? e.message : String(e),
+
       },
       { status: 503 },
     );

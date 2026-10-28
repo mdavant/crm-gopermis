@@ -143,7 +143,7 @@ test(
             })
             .click();
           await page
-            .getByRole("heading", { name: "Clients", exact: true })
+            .getByRole("heading", { name: "Tableau de bord", exact: true })
             .waitFor();
           await page
             .getByRole("button", { name: "Se déconnecter", exact: true })
@@ -151,7 +151,7 @@ test(
           await page
             .getByRole("button", { name: "Se connecter", exact: true })
             .waitFor();
-          await page.route("**/api/auth/login", (r) =>
+          await page.route("**/api/login", (r) =>
             r.fulfill({
               status: 502,
               contentType: "text/html",
@@ -174,16 +174,16 @@ test(
               "Unexpected token",
             ),
           );
-          await page.unroute("**/api/auth/login");
+          await page.unroute("**/api/login");
           await page
             .getByRole("button", { name: "Se connecter", exact: true })
             .click();
           await page
-            .getByRole("heading", { name: "Clients", exact: true })
+            .getByRole("heading", { name: "Tableau de bord", exact: true })
             .waitFor();
           await page.reload();
           await page
-            .getByRole("heading", { name: "Clients", exact: true })
+            .getByRole("heading", { name: "Tableau de bord", exact: true })
             .waitFor();
           assert.ok(
             bearerRequests > 0,

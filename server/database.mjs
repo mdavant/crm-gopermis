@@ -1,110 +1,68 @@
 import pg from "pg";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { embeddedPool } from "./embedded-pool.mjs";
 import { migrate } from "../scripts/migrations.mjs";
 import { accountInput, createAccount } from "./accounts.mjs";
-
+// Shared across Next HMR/module reloads; a failed init can be retried.
 const key = Symbol.for("gopermis.database");
 const state = globalThis[key] ?? (globalThis[key] = {});
-
 async function initialise(bootstrap) {
   let pool, embedded, socket;
   try {
-    const rawUrl = process.env.DATABASE_URL?.trim();
-    const isPlaceholder =
-      rawUrl && (rawUrl.includes("change-me") || rawUrl.includes("localhost:5432"));
-    const url = isPlaceholder ? "" : rawUrl;
-
-    let mode =
+    const url = process.env.DATABASE_URL?.trim();
+    const mode =
       process.env.DATABASE_MODE ??
       (url
         ? "postgres"
-        : "pglite");
-
+        : process.env.NODE_ENV === "production"
+          ? "postgres"
+          : "pglite");
     if (mode === "postgres") {
-      try {
-        pool = new pg.Pool({
-          connectionString: url,
-          max: Number(process.env.DB_POOL_SIZE ?? 10),
-          connectionTimeoutMillis: 3000,
-        });
-        await pool.query("SELECT 1");
-      } catch (e) {
-        console.warn("PostgreSQL connection failed, falling back to embedded PGlite:", e.message);
-        await pool?.end().catch(() => {});
-        pool = undefined;
-        mode = "pglite";
-      }
-    }
-
-    if (mode === "pglite") {
-      const [{ PGlite }, { btree_gist }, { PGLiteSocketServer }] =
-        await Promise.all([
-          import("@electric-sql/pglite"),
-          import("@electric-sql/pglite/contrib/btree_gist"),
-          import("@electric-sql/pglite-socket"),
-        ]);
-      const dataDir = resolve(process.env.PGLITE_DATA_DIR ?? ".data/preview");
-      await mkdir(dataDir, { recursive: true });
-      embedded = await PGlite.create({ dataDir, extensions: { btree_gist } });
-      socket = new PGLiteSocketServer({
-        db: embedded,
-        port: Number(process.env.PGLITE_PORT ?? 0),
-        host: "127.0.0.1",
-        maxConnections: 1,
-      });
-      await socket.start();
+      if (!url)
+        throw Error(
+          "DATABASE_URL requise en mode PostgreSQL. Pour une prévisualisation locale, configurer DATABASE_MODE=pglite.",
+        );
       pool = new pg.Pool({
-        connectionString: `postgres://preview:preview@${socket.getServerConn()}/postgres`,
-        max: 1,
+        connectionString: url,
+        max: Number(process.env.DB_POOL_SIZE ?? 10),
         connectionTimeoutMillis: 5000,
       });
+      // A configured DB failure must never redirect users to another database.
+      await pool.query("SELECT 1");
+    } else if (mode === "pglite") {
+      if (url)
+        throw Error(
+          "Choisir une seule base : DATABASE_MODE=pglite requiert DATABASE_URL vide.",
+        );
+      const [{ PGlite }, { btree_gist }, { pg_trgm }] = await Promise.all([
+        import("@electric-sql/pglite"),
+        import("@electric-sql/pglite/contrib/btree_gist"),
+        import("@electric-sql/pglite/contrib/pg_trgm"),
+      ]);
+      const dataDir = resolve(process.env.PGLITE_DATA_DIR ?? ".data/preview");
+      await mkdir(dataDir, { recursive: true });
+      embedded = await PGlite.create({
+        dataDir,
+        extensions: { btree_gist, pg_trgm },
+      });
+      pool = embeddedPool(embedded);
       const client = await pool.connect();
       try {
         await migrate(client);
       } finally {
         client.release();
       }
-    }
-
-    if (bootstrap) {
+    } else throw Error("DATABASE_MODE invalide : postgres ou pglite attendu.");
+    if (bootstrap && process.env.BOOTSTRAP_PASSWORD) {
       const client = await pool.connect();
       try {
-        const hasUsers = (await client.query("SELECT 1 FROM app_user LIMIT 1")).rowCount;
-        if (!hasUsers) {
-          const bootstrapData = process.env.BOOTSTRAP_PASSWORD
-            ? accountInput()
-            : {
-                identifier: (process.env.BOOTSTRAP_IDENTIFIER || "admin").toLowerCase(),
-                name: process.env.BOOTSTRAP_NAME || "Administrateur GoPermis",
-                password: process.env.BOOTSTRAP_PASSWORD || "GoPermis2026!Admin",
-              };
-          await createAccount(client, bootstrapData, { initialOnly: true });
-        }
-
-        // Seed demo data for initial exploration if empty
-        const adminRes = await client.query("SELECT id FROM app_user LIMIT 1");
-        if (adminRes.rowCount) {
-          const adminId = adminRes.rows[0].id;
-          const vCount = (await client.query("SELECT 1 FROM vehicle LIMIT 1")).rowCount;
-          if (!vCount) {
-            await client.query(
-              "INSERT INTO vehicle(model_id, label, created_by) VALUES($1, $2, $3), ($4, $5, $6), ($7, $8, $9) ON CONFLICT DO NOTHING",
-              [
-                "clio-manual", "Clio V Manuelle (01)", adminId,
-                "clio-auto", "Clio V Automatique (02)", adminId,
-                "rs3", "Audi RS3 Sportback (03)", adminId
-              ]
-            );
-          }
-        }
-      } catch (err) {
-        console.warn("Bootstrap admin notice:", err.message);
+        if (!(await client.query("SELECT 1 FROM app_user LIMIT 1")).rowCount)
+          await createAccount(client, accountInput(), { initialOnly: true });
       } finally {
         client.release();
       }
     }
-
     state.pool = pool;
     state.embedded = embedded;
     state.socket = socket;
@@ -113,11 +71,10 @@ async function initialise(bootstrap) {
     await pool?.end().catch(() => {});
     await socket?.stop().catch(() => {});
     if (socket) await new Promise((r) => setTimeout(r, 200));
-    await embedded?.close().catch(() => {});
+    if (!pool) await embedded?.close().catch(() => {});
     throw e;
   }
 }
-
 export async function database({ bootstrap = true } = {}) {
   if (state.pool) return state.pool;
   if (!state.pending)
@@ -127,12 +84,11 @@ export async function database({ bootstrap = true } = {}) {
     });
   return state.pending;
 }
-
 export async function closeDatabase() {
   await state.pool?.end();
   await state.socket?.stop();
   if (state.socket) await new Promise((r) => setTimeout(r, 200));
-  await state.embedded?.close();
+  if (!state.pool) await state.embedded?.close();
   delete globalThis[key];
   state.pool = undefined;
   state.pending = undefined;

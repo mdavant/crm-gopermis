@@ -1,3 +1,9 @@
+# État au 28 octobre 2026
+
+La base actuelle est la refonte Google 1a1c39e stabilisée, avec ses styles conservés. Les erreurs de compilation, les incompatibilités d'API, l'authentification, l'archivage et plusieurs données fictives ont été corrigés. Les résultats et limites actuels sont dans [VERIFICATIONS](VERIFICATIONS.md) et [CORRECTIONS_2026-10-28](CORRECTIONS_2026-10-28.md). Les sections ci-dessous décrivent les lots antérieurs ; elles ne prouvent pas que leurs interfaces demeurent toutes présentes dans la refonte.
+
+---
+
 # État après refonte connexion et annuaire — 25 octobre 2026
 
 La connexion repose désormais sur un service dédié, avec contrôle de session avant ouverture, sessions d'aperçu compatibles avec les cookies bloqués en iframe, stockage embarqué direct sans TCP, changement de mot de passe et récupération opérateur. La création initiale et les comptes existants restent protégés. Référence : [CONNEXION](CONNEXION.md).

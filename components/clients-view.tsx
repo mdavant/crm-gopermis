@@ -42,7 +42,7 @@ export function ClientsView({
 
   const handleDeleteClient = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Confirmer la suppression définitive du dossier de ${name} ?`)) {
+    if (!window.confirm(`Confirmer la archivage du dossier de ${name} ?`)) {
       return;
     }
     setBusy(true);
@@ -208,7 +208,7 @@ export function ClientsView({
                           <button
                             type="button"
                             className="btnIconTiny danger"
-                            title="Supprimer définitivement"
+                            title="Archiver définitivement"
                             disabled={busy}
                             onClick={(e) =>
                               handleDeleteClient(e, c.id, `${c.first_name} ${c.last_name}`)

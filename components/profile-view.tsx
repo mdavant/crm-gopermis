@@ -6,11 +6,12 @@ import { api, type User } from "../lib/api-types";
 interface ProfileViewProps {
   user: User;
   onUserUpdate: (updated: User) => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
 export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) {
   const [name, setName] = useState(user.name);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,8 +23,8 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
     setError("");
     setMessage("");
 
-    if (newPassword && newPassword.length < 8) {
-      setError("Le nouveau mot de passe doit comporter au moins 8 caractères.");
+    if (newPassword && newPassword.length < 14) {
+      setError("Le nouveau mot de passe doit comporter au moins 14 caractères.");
       return;
     }
 
@@ -36,10 +37,11 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
     try {
       const res = await api<{ ok: boolean; name: string }>("me/update", {
         name,
-        ...(newPassword ? { password: newPassword } : {}),
+        ...(newPassword ? { password: newPassword, currentPassword } : {}),
       });
       setMessage("Votre profil a été mis à jour avec succès.");
       onUserUpdate({ ...user, name: res.name || name });
+      if(newPassword) { await onLogout(); return; }
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
@@ -100,13 +102,16 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
             </h3>
             <p className="helperText">Laissez vide si vous ne souhaitez pas modifier votre mot de passe actuel.</p>
 
+            <label className="profileInputLabel">Mot de passe actuel
+              <input className="profileTextInput" type="password" autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} required={Boolean(newPassword)} />
+            </label>
             <label className="profileInputLabel">
               Nouveau mot de passe
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Au moins 8 caractères"
+                placeholder="Au moins 14 caractères"
                 className="profileTextInput"
               />
             </label>
@@ -139,7 +144,7 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
           <div className="infoList">
             <div className="infoItem">
               <span className="infoLabel">Rôle administrateur</span>
-              <strong className="infoVal">Administrateur Technique</strong>
+              <strong className="infoVal">Utilisateur GoPermis</strong>
             </div>
 
             <div className="infoItem">
@@ -149,7 +154,7 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
 
             <div className="infoItem">
               <span className="infoLabel">Droits d&apos;accès</span>
-              <span className="badgeNeutral">Accès complet</span>
+              <span className="badgeNeutral">Selon les permissions attribuées</span>
             </div>
           </div>
 

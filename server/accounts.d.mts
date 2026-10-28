@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-export function hashPassword(password: string): string;
+
 export function verifyPassword(password: string, encoded: unknown): boolean;
 export function createAccount(
   client: PoolClient,

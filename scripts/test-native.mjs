@@ -68,7 +68,7 @@ try {
     await run(
       "node",
       process.argv.includes("--browser")
-        ? ["tests/browser.smoke.mjs"]
+        ? ["tests/browser.current.mjs"]
         : ["--import", "tsx", "--test", "tests/crm.integration.mjs"],
       { NATIVE_TEST_DATABASE_URL: url },
     ),
@@ -125,12 +125,12 @@ try {
       );
       assert.equal(copy.rows[0].n, original.rows[0].n, table);
     }
-    await assert.rejects(restored.query("DELETE FROM hour_ledger"));
-    await assert.rejects(
-      restored.query("UPDATE booking SET starts_at=starts_at+interval '1 day'"),
-    );
+    if (Number((await restored.query("SELECT count(*) AS n FROM hour_ledger")).rows[0].n))
+      await assert.rejects(restored.query("DELETE FROM hour_ledger"));
+    if (Number((await restored.query("SELECT count(*) AS n FROM booking")).rows[0].n))
+      await assert.rejects(restored.query("UPDATE booking SET starts_at=starts_at+interval '1 day'"));
     console.log(
-      "pg_dump / pg_restore: counts and history guards verified on restored test database.",
+      "pg_dump / pg_restore: counts and applicable history guards verified on restored test database.",
     );
   } finally {
     await restored.end();

@@ -17,6 +17,7 @@ import {
   type Detail,
   type Booking,
   type Resources,
+  type HomeStats,
 } from "../lib/api-types";
 import { Modal } from "../components/modal";
 import { Dashboard } from "../components/dashboard";
@@ -34,6 +35,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
   const [error, setError] = useState("");
+  const [summary, setSummary] = useState<HomeStats | null>(null);
   const [rows, setRows] = useState<ClientRecord[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [resources, setResources] = useState<Resources | null>(null);
@@ -46,14 +48,7 @@ export default function Home() {
   const [create, setCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
-  const [activeFilters, setActiveFilters] = useState<string[]>([
-    "standup",
-    "review",
-    "meeting",
-    "break",
-    "client",
-    "other",
-  ]);
+  const [activeFilters, setActiveFilters] = useState<string[]>(["confirmed", "completed"]);
 
   const toggleFilter = (id: string) => {
     setActiveFilters((prev) =>
@@ -71,19 +66,28 @@ export default function Home() {
       setCat(null);
       setBookings([]);
       setResources(null);
+      setSummary(null);
       return;
     }
-    const [c, list, bList, resData] = await Promise.all([
-      api<Catalog>("catalog").catch(() => null),
-      api<ClientRecord[]>("clients").catch(() => []),
-      api<Booking[]>("bookings").catch(() => []),
-      api<Resources>("resources").catch(() => null),
+    const [c, list, bList, resData, stats] = await Promise.all([
+      api<Catalog>("catalog"),
+      api<ClientRecord[]>("clients"),
+      u.permissions.includes("schedule.read") ? api<Booking[]>("bookings") : Promise.resolve([]),
+      u.permissions.includes("schedule.read") ? api<Resources>("resources") : Promise.resolve(null),
+      api<HomeStats>("stats/summary"),
     ]);
     if (c) setCat(c);
     setRows(list);
     setBookings(bList);
     setResources(resData);
+    setSummary(stats);
   }, []);
+
+  useEffect(() => {
+    const expired=()=>{setUser(null);setRows([]);setDetail(null);setCat(null);setResources(null);setBookings([]);setSummary(null);};
+    window.addEventListener("gopermis-session-expired",expired);
+    return ()=>window.removeEventListener("gopermis-session-expired",expired);
+  },[]);
 
   useEffect(() => {
     refresh()
@@ -216,7 +220,6 @@ export default function Home() {
               minLength={setupRequired ? 14 : 1}
               maxLength={256}
               placeholder="••••••••••••••••"
-              defaultValue="GoPermis2026!Admin"
               required
             />
           </label>
@@ -240,11 +243,7 @@ export default function Home() {
               textAlign: "left",
             }}
           >
-            <strong>Identifiants administrateur :</strong>
-            <br />
-            Identifiant : <strong>admin</strong>
-            <br />
-            Mot de passe : <strong>GoPermis2026!Admin</strong>
+            Utilisez votre identifiant personnel et votre mot de passe.
           </div>
         </form>
       </div>
@@ -368,6 +367,7 @@ export default function Home() {
           onSelectDate={(d) => setSelectedCalendarDate(d)}
           activeFilters={activeFilters}
           onToggleFilter={toggleFilter}
+          stats={{manualVehicles:resources?.vehicles.filter(v=>v.active && v.model_id==="clio-manual").length ?? 0,autoVehicles:resources?.vehicles.filter(v=>v.active && v.model_id!=="clio-manual").length ?? 0}}
         />
       )}
 
@@ -385,6 +385,7 @@ export default function Home() {
           {view === "Accueil" && (
             <Dashboard
               user={user}
+              summary={summary}
               clients={rows}
               bookings={bookings}
               resources={resources}

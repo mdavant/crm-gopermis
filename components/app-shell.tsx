@@ -35,6 +35,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  if (pathname === "/") return <>{children}</>;
+
   if (loading) {
     return (
       <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", background: "#f8fafc" }}>

@@ -159,21 +159,24 @@ export async function updateResource(raw: unknown, actor: string) {
       }),
     ])
     .parse(raw);
-  return transaction(async (c) => {
-    if (x.kind === "vehicle") {
-      await c.query(
-        "UPDATE vehicle SET label = $1, model_id = COALESCE($2, model_id), active = COALESCE($3, active) WHERE id = $4",
-        [x.label, x.modelId ?? null, x.active !== undefined ? x.active : null, x.id]
-      );
-    } else {
-      await c.query(
-        "UPDATE instructor SET name = $1, active = COALESCE($2, active) WHERE id = $3",
-        [x.name, x.active !== undefined ? x.active : null, x.id]
-      );
-    }
-    await audit(c, actor, "resource.updated", x.id, { kind: x.kind });
-    return { ok: true };
-  });
+  try {
+    return await transaction(async c => {
+      const table=x.kind==='vehicle'?'vehicle':'instructor';
+      const current=(await c.query(`SELECT * FROM ${table} WHERE id=$1 FOR UPDATE`,[x.id])).rows[0];
+      if(!current) throw new HttpError(404,"Ressource introuvable");
+      if(x.active===false && (await c.query(`SELECT 1 FROM calendar_occupancy WHERE ${columns[x.kind]}=$1 AND ends_at>now() LIMIT 1`,[x.id])).rowCount)
+        throw new HttpError(409,"Cette ressource a des séances ou indisponibilités à venir.");
+      if(x.kind==='vehicle') {
+        if(x.modelId && x.modelId!==current.model_id) {
+          if(!(await c.query("SELECT 1 FROM vehicle_model WHERE id=$1",[x.modelId])).rowCount) throw new HttpError(422,"Modèle inconnu");
+          if((await c.query("SELECT 1 FROM booking WHERE vehicle_id=$1 LIMIT 1",[x.id])).rowCount) throw new HttpError(409,"Le modèle d’un véhicule associé à des séances ne peut pas être modifié.");
+        }
+        await c.query("UPDATE vehicle SET label=$1,model_id=COALESCE($2,model_id),active=COALESCE($3,active) WHERE id=$4",[x.label,x.modelId??null,x.active??null,x.id]);
+      } else await c.query("UPDATE instructor SET name=$1,active=COALESCE($2,active) WHERE id=$3",[x.name,x.active??null,x.id]);
+      await audit(c,actor,"resource.updated",x.id,{kind:x.kind});
+      return {ok:true};
+    });
+  } catch(e) { conflict(e); }
 }
 export async function createBlock(raw: unknown, actor: string) {
   const x = interval
@@ -243,7 +246,7 @@ export async function getHomeStats() {
   });
   const [totalClientsRes, todayBookingsRes] = await Promise.all([
     pool.query(
-      "SELECT count(*)::integer AS total FROM client WHERE status != 'Archivé'",
+      "SELECT count(*)::integer AS total FROM client",
     ),
     pool.query(
       `SELECT count(*)::integer AS count, COALESCE(sum(minutes),0)::integer AS total_minutes

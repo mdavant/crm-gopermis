@@ -123,6 +123,14 @@ test(
         401,
         "Production ignores preview bearer transport",
       );
+      await request("catalog/update", {kind:"offer",id:"10+1",label:"10 h + 1 h offerte",paidMinutes:600,bonusMinutes:60});
+      await request("me/update", {name:"TEST Profil"});
+      assert.equal((await request("me")).name,"TEST Profil");
+      await request("me/update", {name:"TEST Profil",password:"fictitious-changed-password"},422);
+      const archived=await request("clients",{firstName:"TEST",lastName:"Archivage",phone:"0600000099"},201);
+      await request("clients/delete",{id:archived.id});
+      assert.equal((await request("clients/"+archived.id)).client.status,"Archivé");
+      await request("resources/update",{kind:"vehicle",id:randomUUID(),label:"TEST inconnu"},404);
       await request(
         "clients",
         { firstName: "Fail", lastName: "Origin", phone: "0600000000" },

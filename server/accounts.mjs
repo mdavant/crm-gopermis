@@ -66,11 +66,6 @@ export async function createAccount(
   }
 }
 
-export function hashPassword(password) {
-  const salt = randomBytes(16).toString("hex");
-  return salt + ":" + scryptSync(password, salt, 64).toString("hex");
-}
-
 export function verifyPassword(password, encoded) {
   const valid =
     typeof encoded === "string" &&

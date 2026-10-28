@@ -50,7 +50,7 @@ export default function ClientDossierPage({
     );
   }
 
-  if (error || !detail || !cat) {
+  if (!detail || !cat) {
     return (
       <div style={{ maxWidth: "600px", margin: "40px auto", textAlign: "center" }}>
         <div className="card" style={{ padding: "32px 24px" }}>
@@ -76,6 +76,7 @@ export default function ClientDossierPage({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {error && <p className="error" role="alert">{error}</p>}
       <ClientDetail
         detail={detail}
         cat={cat}

@@ -11,8 +11,12 @@ import {
   AlertTriangle,
   UserCheck,
   Sparkles,
+  HardDrive,
+  ShieldCheck,
 } from "lucide-react";
 import type { Booking, ClientRecord, Resources, User, HomeStats } from "../lib/api-types";
+
+import { NotificationBell } from "./notification-bell";
 
 interface DashboardProps {
   user: User;
@@ -35,6 +39,12 @@ export function Dashboard({
   onNewClient,
   onNewBooking,
 }: DashboardProps) {
+  const isAdmin =
+    user.permissions?.includes("admin.full") ||
+    user.permissions?.includes("technical_admin") ||
+    user.roles?.includes("technical_admin") ||
+    user.roles?.includes("admin");
+
   const todayStr = new Date().toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
@@ -67,15 +77,55 @@ export function Dashboard({
           <p className="dashSubtitle">{capitalizedToday} · Vue d&apos;ensemble de l&apos;auto-école</p>
         </div>
 
-        <div className="dashHeaderActions">
+        <div className="dashHeaderActions" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {isAdmin && (
+            <button
+              type="button"
+              className="btnAdminPanel"
+              onClick={() => onNavigate("AdminPanel")}
+              style={{
+                height: "38px",
+                padding: "0 15px",
+                borderRadius: "10px",
+                border: "1px solid #2563eb",
+                background: "#eff6ff",
+                color: "#2563eb",
+                fontSize: "12.5px",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "7px",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(37,99,235,0.18)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <ShieldCheck size={16} />
+              <span>Panel Admin</span>
+            </button>
+          )}
+          <button type="button" className="btnSecondary" onClick={() => onNavigate("Drive")}>
+            <HardDrive size={16} />
+            <span>Drive</span>
+          </button>
           <button type="button" className="btnSecondary" onClick={onNewClient}>
             <Plus size={16} />
             <span>Nouveau client</span>
           </button>
-          <button type="button" className="btnPrimary" onClick={onNewBooking}>
+          <button
+            type="button"
+            className="btnPrimary"
+            onClick={onNewBooking}
+            style={{
+              background: "#2563eb",
+              color: "#ffffff",
+              boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
+            }}
+          >
             <CalendarDays size={16} />
-            <span>Planifier une séance</span>
+            <span>Planifier</span>
           </button>
+          <NotificationBell />
         </div>
       </div>
 
@@ -86,29 +136,29 @@ export function Dashboard({
           {/* 4 Quick Stat Cards */}
           <div className="kpiGrid">
             <div className="kpiCard" onClick={() => onNavigate("Clients")}>
-              <div className="kpiIconWrap blue">
+              <div className="kpiIconWrap blue" style={{ background: "#eff6ff", color: "#2563eb" }}>
                 <Users size={20} />
               </div>
               <div className="kpiContent">
                 <span className="kpiLabel">Élèves enregistrés</span>
                 <strong className="kpiValue">{summary?.totalClients ?? "—"}</strong>
-                <span className="kpiHint">Gérer les dossiers &gt;</span>
+                <span className="kpiHint" style={{ color: "#2563eb", fontWeight: 700 }}>Gérer les dossiers &gt;</span>
               </div>
             </div>
 
             <div className="kpiCard" onClick={() => onNavigate("Planning")}>
-              <div className="kpiIconWrap purple">
+              <div className="kpiIconWrap" style={{ background: "#eff6ff", color: "#2563eb" }}>
                 <CalendarDays size={20} />
               </div>
               <div className="kpiContent">
                 <span className="kpiLabel">Séances aujourd&apos;hui</span>
                 <strong className="kpiValue">{summary?.todayBookingsCount ?? "—"}</strong>
-                <span className="kpiHint">Voir le calendrier &gt;</span>
+                <span className="kpiHint" style={{ color: "#2563eb", fontWeight: 700 }}>Voir le calendrier &gt;</span>
               </div>
             </div>
 
-            <div className="kpiCard" onClick={() => onNavigate("Ressources")}>
-              <div className="kpiIconWrap green">
+            <div className="kpiCard" onClick={() => onNavigate("Donnees")}>
+              <div className="kpiIconWrap" style={{ background: "#f1f5f9", color: "#334155" }}>
                 <Car size={20} />
               </div>
               <div className="kpiContent">
@@ -118,14 +168,14 @@ export function Dashboard({
               </div>
             </div>
 
-            <div className="kpiCard" onClick={() => onNavigate("Ressources")}>
-              <div className="kpiIconWrap amber">
+            <div className="kpiCard" onClick={() => onNavigate("Donnees")}>
+              <div className="kpiIconWrap" style={{ background: "#eff6ff", color: "#2563eb" }}>
                 <UserCheck size={20} />
               </div>
               <div className="kpiContent">
                 <span className="kpiLabel">Moniteurs équipe</span>
                 <strong className="kpiValue">{activeInstructors}</strong>
-                <span className="kpiHint">Planning disponible</span>
+                <span className="kpiHint" style={{ color: "#2563eb", fontWeight: 700 }}>Planning disponible</span>
               </div>
             </div>
           </div>
@@ -141,7 +191,7 @@ export function Dashboard({
 
             <div className="priorityActionsList">
               <div className="priorityActionItem">
-                <div className="priorityIconBox amber">
+                <div className="priorityIconBox" style={{ background: "#eff6ff", color: "#2563eb" }}>
                   <AlertTriangle size={18} />
                 </div>
                 <div className="priorityContent">
@@ -151,6 +201,7 @@ export function Dashboard({
                 <button
                   type="button"
                   className="btnSmallGray"
+                  style={{ color: "#2563eb", fontWeight: 700 }}
                   onClick={() => onNavigate("Clients")}
                 >
                   Voir
@@ -158,7 +209,7 @@ export function Dashboard({
               </div>
 
               <div className="priorityActionItem">
-                <div className="priorityIconBox blue">
+                <div className="priorityIconBox" style={{ background: "#eff6ff", color: "#2563eb" }}>
                   <FileCheck2 size={18} />
                 </div>
                 <div className="priorityContent">
@@ -168,6 +219,7 @@ export function Dashboard({
                 <button
                   type="button"
                   className="btnSmallGray"
+                  style={{ color: "#2563eb", fontWeight: 700 }}
                   onClick={() => onNavigate("Planning")}
                 >
                   Ouvrir
@@ -175,7 +227,7 @@ export function Dashboard({
               </div>
 
               <div className="priorityActionItem">
-                <div className="priorityIconBox purple">
+                <div className="priorityIconBox" style={{ background: "#eff6ff", color: "#2563eb" }}>
                   <Sparkles size={18} />
                 </div>
                 <div className="priorityContent">
@@ -185,7 +237,8 @@ export function Dashboard({
                 <button
                   type="button"
                   className="btnSmallGray"
-                  onClick={() => onNavigate("Ressources")}
+                  style={{ color: "#2563eb", fontWeight: 700 }}
+                  onClick={() => onNavigate("Donnees")}
                 >
                   Gérer
                 </button>

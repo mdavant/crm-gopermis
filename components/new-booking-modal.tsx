@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "./modal";
-import { api, type Detail, type Resources, type ClientPage, type Booking } from "../lib/api-types";
+import { api, type Detail, type Resources, type ClientPage, type Booking, type User } from "../lib/api-types";
 import { useApp } from "./app-context";
 import { IntervalFields, localInstant } from "./schedule";
 import { AlertCircle } from "lucide-react";
@@ -25,8 +25,9 @@ export function NewBookingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // Load resources once when modal opens
+  // Load resources and user once when modal opens
   useEffect(() => {
     if (newBookingOpen) {
       setRequestId(crypto.randomUUID());
@@ -34,6 +35,9 @@ export function NewBookingModal({
       api<Resources>("resources")
         .then(setResources)
         .catch((e) => setError(e.message));
+      api<User>("me")
+        .then(setCurrentUser)
+        .catch(() => {});
     }
   }, [newBookingOpen]);
 
@@ -234,18 +238,35 @@ export function NewBookingModal({
                 {selectedService.price_snapshot.support === "GoPermis" ? (
                   <label>
                     Moniteur
-                    <select name="instructorId" required defaultValue="">
-                      <option value="" disabled>
-                        Sélectionner un moniteur
-                      </option>
-                      {resources?.instructors
-                        .filter((i) => i.active)
-                        .map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.name}
-                          </option>
-                        ))}
-                    </select>
+                    {(() => {
+                      const isOwnOnly =
+                        currentUser?.permissions.includes("planning.own_only") &&
+                        !currentUser?.permissions.includes("admin.full");
+                      const allInstructors = resources?.instructors.filter((i) => i.active) ?? [];
+                      const matchingInst = allInstructors.find((i) =>
+                        currentUser?.name?.toLowerCase().includes(i.name.toLowerCase()) ||
+                        i.name.toLowerCase().includes(currentUser?.name?.toLowerCase() || "")
+                      );
+                      const displayInstructors = isOwnOnly && matchingInst
+                        ? [matchingInst]
+                        : allInstructors;
+                      const defaultInstId = isOwnOnly && matchingInst ? matchingInst.id : "";
+
+                      return (
+                        <select name="instructorId" required defaultValue={defaultInstId}>
+                          {!defaultInstId && (
+                            <option value="" disabled>
+                              Sélectionner un moniteur
+                            </option>
+                          )}
+                          {displayInstructors.map((i) => (
+                            <option key={i.id} value={i.id}>
+                              {i.name} {isOwnOnly ? "(Vous-même)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </label>
                 ) : (
                   <>
@@ -269,7 +290,15 @@ export function NewBookingModal({
                   La réservation bloque les créneaux avec vérification anti-conflit stricte (véhicule, moniteur et élève).
                 </p>
 
-                <button className="primary" disabled={busy || compatibleVehicles.length === 0}>
+                <button
+                  className="primary"
+                  disabled={busy || compatibleVehicles.length === 0}
+                  style={{
+                    background: "#2563eb",
+                    color: "#ffffff",
+                    boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
+                  }}
+                >
                   {busy ? "Vérification des disponibilités…" : "Confirmer la réservation"}
                 </button>
               </>

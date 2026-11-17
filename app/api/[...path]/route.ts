@@ -30,6 +30,20 @@ import {
   completeBooking,
 } from "../../../server/scheduling";
 import { setupStatus, setupAccount } from "../../../server/setup";
+import {
+  listDriveItems,
+  createFolder,
+  createFile,
+  updateDriveItem,
+  deleteDriveItem,
+  getFolderTree,
+} from "../../../server/drive";
+import {
+  listAdminUsers,
+  createAdminUser,
+  updateAdminUser,
+  deleteAdminUser,
+} from "../../../server/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handle(
@@ -41,9 +55,9 @@ async function handle(
     const route = path.join("/");
     const isPost = req.method === "POST";
     if (isPost) checkOrigin(req);
-    const json = async () => {
+    const json = async (maxBytes = 32000) => {
       const body = await req.text();
-      if (body.length > 16000)
+      if (body.length > maxBytes)
         throw new HttpError(413, "Requête trop volumineuse");
       try {
         return JSON.parse(body);
@@ -226,6 +240,66 @@ async function handle(
     ) {
       const u = await requireUser("sessions.complete");
       return NextResponse.json(await completeBooking(path[1], u.id));
+    }
+    if (route === "drive/items" && !isPost) {
+      await requireUser();
+      const url = new URL(req.url);
+      const parentId = url.searchParams.get("parentId");
+      const search = url.searchParams.get("q") ?? undefined;
+      const filter = url.searchParams.get("filter") ?? undefined;
+      const starredOnly = url.searchParams.get("starred") === "true";
+      return NextResponse.json(
+        await listDriveItems({ parentId, search, filter, starredOnly })
+      );
+    }
+    if (route === "drive/folders-tree" && !isPost) {
+      await requireUser();
+      return NextResponse.json(await getFolderTree());
+    }
+    if (route === "drive/folder" && isPost) {
+      const u = await requireUser();
+      const body = await json(64000);
+      return NextResponse.json(
+        await createFolder({ ...body, userId: u.id }),
+        { status: 201 }
+      );
+    }
+    if (route === "drive/file" && isPost) {
+      const u = await requireUser();
+      const body = await json(35 * 1024 * 1024);
+      return NextResponse.json(
+        await createFile({ ...body, userId: u.id }),
+        { status: 201 }
+      );
+    }
+    if (route === "drive/update" && isPost) {
+      const u = await requireUser();
+      const body = await json(64000);
+      return NextResponse.json(
+        await updateDriveItem(body.id, body.updates, u.id)
+      );
+    }
+    if (route === "drive/delete" && isPost) {
+      const u = await requireUser();
+      const body = await json(64000);
+      return NextResponse.json(
+        await deleteDriveItem(body.id, u.id)
+      );
+    }
+    if (route === "admin/users" && !isPost) {
+      return NextResponse.json(await listAdminUsers());
+    }
+    if (route === "admin/users" && isPost) {
+      const body = await json(64000);
+      return NextResponse.json(await createAdminUser(body), { status: 201 });
+    }
+    if (route === "admin/users/update" && isPost) {
+      const body = await json(64000);
+      return NextResponse.json(await updateAdminUser(body));
+    }
+    if (route === "admin/users/delete" && isPost) {
+      const body = await json(64000);
+      return NextResponse.json(await deleteAdminUser(body));
     }
     throw new HttpError(404, "Route introuvable");
   } catch (e) {

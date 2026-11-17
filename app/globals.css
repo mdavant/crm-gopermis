@@ -93,13 +93,13 @@ button {
   color: #222;
 }
 .sidebar nav button.active {
-  background: #fff1e8;
-  color: #e95f00;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 650;
 }
 .sidebar nav b {
   margin-left: auto;
-  background: #ff6a00;
+  background: #2563eb;
   color: white;
   border-radius: 20px;
   min-width: 20px;
@@ -119,8 +119,8 @@ button {
 .navBottom i {
   font-size: 9px;
   font-style: normal;
-  background: #fff1e8;
-  color: #f06400;
+  background: #eff6ff;
+  color: #2563eb;
   padding: 3px 6px;
   border-radius: 5px;
   margin-left: auto;
@@ -223,7 +223,7 @@ header {
   position: absolute;
   width: 7px;
   height: 7px;
-  background: #ff6a00;
+  background: #2563eb;
   border: 2px solid white;
   border-radius: 50%;
   right: 9px;
@@ -306,8 +306,8 @@ header {
   width: 39px;
   height: 39px;
   border-radius: 12px;
-  background: #fff2e8;
-  color: #ff6a00;
+  background: #eff6ff;
+  color: #2563eb;
   display: grid;
   place-items: center;
 }
@@ -371,7 +371,7 @@ header {
 .cardTitle button {
   border: 0;
   background: transparent;
-  color: #f06400;
+  color: #2563eb;
   font-size: 10px;
   display: flex;
   align-items: center;
@@ -411,9 +411,9 @@ header {
 .line i {
   width: 8px;
   height: 8px;
-  background: #ff6a00;
+  background: #2563eb;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 1px #ff6a00;
+  box-shadow: 0 0 0 1px #2563eb;
   border-radius: 50%;
   margin-top: 18px;
   z-index: 1;
@@ -505,8 +505,8 @@ header {
 }
 .task > b {
   font-size: 10px;
-  color: #ff6a00;
-  background: #fff1e8;
+  color: #2563eb;
+  background: #eff6ff;
   border-radius: 20px;
   min-width: 22px;
   height: 22px;
@@ -576,8 +576,8 @@ header {
   color: #278455;
 }
 .tr em.doc {
-  background: #fff4e9;
-  color: #dc6800;
+  background: #eff6ff;
+  color: #2563eb;
 }
 .overlay {
   display: none;
@@ -1385,13 +1385,13 @@ body {
   border-right: 1px solid #f1f5f9;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   position: fixed;
   top: 0;
   bottom: 0;
   left: 0;
   z-index: 30;
+  padding: 16px 0 14px;
   box-shadow: 1px 0 3px rgba(0, 0, 0, 0.02);
 }
 
@@ -1401,6 +1401,18 @@ body {
   align-items: center;
   gap: 12px;
   width: 100%;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.dockBottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding-bottom: 4px;
 }
 
 .dockIconBtn {
@@ -4006,4 +4018,1023 @@ body {
   align-items: center;
   gap: 8px;
 }
+
+/* ==========================================================================
+   DARK MODE & THEME STYLES (One-click toggle Soleil / Lune)
+   ========================================================================== */
+
+[data-theme="dark"],
+.dark {
+  color-scheme: dark;
+  --bg-page: #090d16;
+  --bg-surface: #0f172a;
+  --bg-surface-card: #131d31;
+  --bg-surface-elevated: #1e293b;
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+  --text-main: #f8fafc;
+  --text-body: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+}
+
+[data-theme="dark"] body,
+.dark body {
+  background: #090d16 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .appShell,
+[data-theme="dark"] .dualAppShell,
+[data-theme="dark"] main,
+[data-theme="dark"] .content,
+.dark .appShell,
+.dark .dualAppShell,
+.dark main,
+.dark .content {
+  background: #090d16 !important;
+}
+
+/* Sidebar in dark mode */
+[data-theme="dark"] .sidebar,
+.dark .sidebar {
+  background: #0b101b !important;
+  border-right-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .sidebar nav button,
+[data-theme="dark"] .navBottom button,
+.dark .sidebar nav button,
+.dark .navBottom button {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .sidebar nav button:hover,
+[data-theme="dark"] .navBottom button:hover,
+.dark .sidebar nav button:hover,
+.dark .navBottom button:hover {
+  background: #131d31;
+  color: #ffffff;
+}
+
+/* Active page in dark mode: pure white icon/text with subtle soft white glow, NO orange block */
+[data-theme="dark"] .sidebar nav button.active,
+.dark .sidebar nav button.active {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  font-weight: 650 !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="dark"] .sidebar nav button.active svg,
+[data-theme="dark"] .sidebar nav button.active span,
+.dark .sidebar nav button.active svg,
+.dark .sidebar nav button.active span {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+}
+
+[data-theme="dark"] .navBottom,
+[data-theme="dark"] .profile,
+.dark .navBottom,
+.dark .profile {
+  border-top-color: #1a2234;
+}
+
+[data-theme="dark"] .profile strong,
+.dark .profile strong {
+  color: #f8fafc;
+}
+
+/* Dock Rail in dark mode */
+[data-theme="dark"] .dockRail,
+.dark .dockRail {
+  background: #0b101b !important;
+  border-right-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .dockIconBtn,
+.dark .dockIconBtn {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .dockIconBtn:hover,
+.dark .dockIconBtn:hover {
+  background: #131d31;
+  color: #ffffff;
+}
+
+/* Active dock icon in dark mode: Pure white icon with soft white glow, discreet subtle pill, NO loud orange block */
+[data-theme="dark"] .dockIconBtn.active,
+.dark .dockIconBtn.active {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-theme="dark"] .dockIconBtn.active svg,
+.dark .dockIconBtn.active svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.7));
+}
+
+[data-theme="dark"] .dockUserAvatar,
+.dark .dockUserAvatar {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .dockUserAvatar.active,
+.dark .dockUserAvatar.active {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Standardized primary & secondary buttons in dark mode */
+[data-theme="dark"] .btnPrimary,
+.dark .btnPrimary {
+  background: #f8fafc !important;
+  color: #090d16 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .btnPrimary:hover:not(:disabled),
+.dark .btnPrimary:hover:not(:disabled) {
+  background: #ffffff !important;
+}
+
+[data-theme="dark"] .btnSecondary,
+.dark .btnSecondary {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .btnSecondary:hover:not(:disabled),
+.dark .btnSecondary:hover:not(:disabled) {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: #475569 !important;
+}
+
+[data-theme="dark"] .btnSmallGray,
+.dark .btnSmallGray {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .btnSmallGray:hover,
+.dark .btnSmallGray:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .btnIconTiny,
+.dark .btnIconTiny {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .btnIconTiny:hover,
+.dark .btnIconTiny:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+/* Header & Navigation top bars */
+[data-theme="dark"] header,
+.dark header {
+  background: rgba(11, 16, 27, 0.92) !important;
+  border-bottom-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .search,
+.dark .search {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .search input,
+.dark .search input {
+  color: #f8fafc !important;
+  background: transparent !important;
+}
+
+[data-theme="dark"] .search kbd,
+.dark .search kbd {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .iconBtn,
+.dark .iconBtn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .iconBtn:hover,
+.dark .iconBtn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+/* Workspaces global dark backgrounds */
+[data-theme="dark"] .dashboardWorkspace,
+[data-theme="dark"] .calendarWorkspace,
+[data-theme="dark"] .clientsWorkspace,
+[data-theme="dark"] .profileWorkspace,
+[data-theme="dark"] .notificationsWorkspace,
+[data-theme="dark"] .resourcesWorkspace,
+[data-theme="dark"] .pricingWorkspace,
+[data-theme="dark"] .donneesWorkspace,
+[data-theme="dark"] .clientDetail,
+.dark .dashboardWorkspace,
+.dark .calendarWorkspace,
+.dark .clientsWorkspace,
+.dark .profileWorkspace,
+.dark .notificationsWorkspace,
+.dark .resourcesWorkspace,
+.dark .pricingWorkspace,
+.dark .donneesWorkspace,
+.dark .clientDetail {
+  background: #090d16 !important;
+  color: #f1f5f9 !important;
+}
+
+/* DASHBOARD VIEW in dark mode */
+[data-theme="dark"] .dashGreeting,
+.dark .dashGreeting {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .dashTitle,
+.dark .dashTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dashSubtitle,
+.dark .dashSubtitle {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .kpiCard,
+.dark .kpiCard {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .kpiCard:hover,
+.dark .kpiCard:hover {
+  background: #131d31 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .kpiLabel,
+.dark .kpiLabel {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .kpiValue,
+.dark .kpiValue {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .kpiHint,
+.dark .kpiHint {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .dashSectionCard,
+[data-theme="dark"] .todayScheduleCard,
+.dark .dashSectionCard,
+.dark .todayScheduleCard {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .sectionCardTitle,
+[data-theme="dark"] .scheduleCardTitle,
+.dark .sectionCardTitle,
+.dark .scheduleCardTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .scheduleCardSubtitle,
+.dark .scheduleCardSubtitle {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .priorityActionItem,
+[data-theme="dark"] .recentClientRow,
+.dark .priorityActionItem,
+.dark .recentClientRow {
+  background: #131d31 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .priorityContent strong,
+[data-theme="dark"] .clientMiniMeta strong,
+.dark .priorityContent strong,
+.dark .clientMiniMeta strong {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .priorityContent p,
+[data-theme="dark"] .clientMiniMeta span,
+.dark .priorityContent p,
+.dark .clientMiniMeta span {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .clientMiniAvatar,
+.dark .clientMiniAvatar {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .linkButton,
+.dark .linkButton {
+  color: #38bdf8 !important;
+}
+
+[data-theme="dark"] .emptyTodaySchedule,
+[data-theme="dark"] .emptyDashBox,
+.dark .emptyTodaySchedule,
+.dark .emptyDashBox {
+  color: #94a3b8 !important;
+}
+
+/* CALENDAR VIEW in dark mode (Fixes image_01ae6bc2.png) */
+[data-theme="dark"] .calendarTopBar,
+.dark .calendarTopBar {
+  background: #0b101b !important;
+  border-bottom: 1px solid #1a2234 !important;
+}
+
+[data-theme="dark"] .calendarBreadcrumb,
+.dark .calendarBreadcrumb {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .crumbSep,
+.dark .crumbSep {
+  color: #475569 !important;
+}
+
+[data-theme="dark"] .crumbCurrent,
+.dark .crumbCurrent {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .calendarMainTitle,
+.dark .calendarMainTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .calendarMonthDropdown,
+.dark .calendarMonthDropdown {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .iconBtnSmall,
+.dark .iconBtnSmall {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .iconBtnSmall:hover,
+.dark .iconBtnSmall:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: #475569 !important;
+}
+
+[data-theme="dark"] .todayNavBtn,
+.dark .todayNavBtn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .todayNavBtn:hover,
+.dark .todayNavBtn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .eventCountBadge,
+.dark .eventCountBadge {
+  background: rgba(2, 132, 199, 0.15) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(2, 132, 199, 0.3) !important;
+}
+
+[data-theme="dark"] .syncGoogleBtn,
+.dark .syncGoogleBtn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .syncGoogleBtn:hover,
+.dark .syncGoogleBtn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .viewSwitcherPill,
+.dark .viewSwitcherPill {
+  background: #1e293b !important;
+}
+
+[data-theme="dark"] .viewPillBtn,
+.dark .viewPillBtn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .viewPillBtn:hover,
+.dark .viewPillBtn:hover {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .viewPillBtn.active,
+.dark .viewPillBtn.active {
+  background: #0b101b !important;
+  color: #f8fafc !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="dark"] .calendarPrimaryAction,
+.dark .calendarPrimaryAction {
+  background: #f8fafc !important;
+  color: #090d16 !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="dark"] .calendarPrimaryAction:hover,
+.dark .calendarPrimaryAction:hover {
+  background: #ffffff !important;
+}
+
+[data-theme="dark"] .calendarGridContainer,
+.dark .calendarGridContainer {
+  background: #090d16 !important;
+}
+
+[data-theme="dark"] .calendarTable,
+.dark .calendarTable {
+  background: #090d16 !important;
+}
+
+[data-theme="dark"] .calendarTable thead,
+.dark .calendarTable thead {
+  background: #0b101b !important;
+  box-shadow: 0 1px 0 #1a2234 !important;
+}
+
+[data-theme="dark"] .dayColHeader,
+[data-theme="dark"] .timezoneColHeader,
+.dark .dayColHeader,
+.dark .timezoneColHeader {
+  border-right-color: #1a2234 !important;
+  border-bottom-color: #1a2234 !important;
+  background: #0b101b !important;
+}
+
+[data-theme="dark"] .dayNumber,
+.dark .dayNumber {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .calendarRow,
+[data-theme="dark"] .calendarRow td,
+.dark .calendarRow,
+.dark .calendarRow td {
+  border-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .calendarSlotCell:hover,
+.dark .calendarSlotCell:hover {
+  background: #131d31 !important;
+}
+
+[data-theme="dark"] .timeCellLabel,
+.dark .timeCellLabel {
+  color: #94a3b8 !important;
+  border-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .dayViewContainer,
+.dark .dayViewContainer {
+  background: #090d16 !important;
+}
+
+[data-theme="dark"] .dayViewHeader,
+.dark .dayViewHeader {
+  border-bottom-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .dayViewHeader h2,
+.dark .dayViewHeader h2 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dayBookingCount,
+.dark .dayBookingCount {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .dayTimelineRow,
+.dark .dayTimelineRow {
+  border-bottom-color: #1a2234 !important;
+}
+
+[data-theme="dark"] .dayTimelineRow:hover,
+.dark .dayTimelineRow:hover {
+  background: #131d31 !important;
+}
+
+/* Secondary calendar sidebar */
+[data-theme="dark"] .calendarSidebar,
+[data-theme="dark"] .calendarSubPanel,
+.dark .calendarSidebar,
+.dark .calendarSubPanel {
+  background: #0b101b !important;
+  border-right-color: #1a2234 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .miniNavBtn,
+.dark .miniNavBtn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .miniNavBtn:hover,
+.dark .miniNavBtn:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .miniMonthTitle,
+.dark .miniMonthTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .miniDayCell,
+.dark .miniDayCell {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .miniDayCell.outOfMonth,
+.dark .miniDayCell.outOfMonth {
+  color: #475569 !important;
+}
+
+[data-theme="dark"] .miniDayCell:hover,
+.dark .miniDayCell:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .subPanelDivider,
+.dark .subPanelDivider {
+  background: #1a2234 !important;
+}
+
+/* CLIENTS VIEW in dark mode (Fixes image_27c3e7f4.png) */
+[data-theme="dark"] .clientsMainTitle,
+.dark .clientsMainTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .clientsSubtitle,
+.dark .clientsSubtitle {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .searchBarContainer,
+.dark .searchBarContainer {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .searchInputModern,
+.dark .searchInputModern {
+  color: #f8fafc !important;
+  background: transparent !important;
+}
+
+[data-theme="dark"] .searchInputModern::placeholder,
+.dark .searchInputModern::placeholder {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] .clientTabsRow,
+.dark .clientTabsRow {
+  background: #1e293b !important;
+}
+
+[data-theme="dark"] .clientTabBtn,
+.dark .clientTabBtn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .clientTabBtn:hover,
+.dark .clientTabBtn:hover {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .clientTabBtn.active,
+.dark .clientTabBtn.active {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="dark"] .clientsListCard,
+.dark .clientsListCard {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .emptyClientsView,
+.dark .emptyClientsView {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .emptyClientsView h3,
+.dark .emptyClientsView h3 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .emptyClientsView p,
+.dark .emptyClientsView p {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .emptyIconCircle,
+.dark .emptyIconCircle {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .clientsTable th,
+.dark .clientsTable th {
+  background: #131d31 !important;
+  color: #94a3b8 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .clientsTable td,
+.dark .clientsTable td {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .clientRowItem,
+.dark .clientRowItem {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .clientRowItem:hover,
+.dark .clientRowItem:hover {
+  background: rgba(30, 41, 59, 0.45) !important;
+}
+
+[data-theme="dark"] .clientAvatarCell,
+.dark .clientAvatarCell {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .contactRow,
+.dark .contactRow {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .subEmail,
+.dark .subEmail {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .sourceTag,
+.dark .sourceTag {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .openFileBtn,
+.dark .openFileBtn {
+  color: #f8fafc !important;
+}
+
+/* DONNÉES / PRICING & RESOURCES in dark mode (Fixes image_8f19aab2.png & image_d26bdfb3.png) */
+[data-theme="dark"] .profileEyebrow,
+[data-theme="dark"] .eyebrow,
+.dark .profileEyebrow,
+.dark .eyebrow {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .pricingTitle,
+[data-theme="dark"] .resourcesTitle,
+[data-theme="dark"] .pricingSectionTitle,
+.dark .pricingTitle,
+.dark .resourcesTitle,
+.dark .pricingSectionTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .pricingSubtitle,
+[data-theme="dark"] .resourcesSubtitle,
+.dark .pricingSubtitle,
+.dark .resourcesSubtitle {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .pricingCard,
+[data-theme="dark"] .resourceSectionCard,
+[data-theme="dark"] .offerCard,
+.dark .pricingCard,
+.dark .resourceSectionCard,
+.dark .offerCard {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .pricingCardHeader,
+[data-theme="dark"] .sectionCardHeader,
+.dark .pricingCardHeader,
+.dark .sectionCardHeader {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .pricingModelIcon,
+[data-theme="dark"] .offerIconBox,
+.dark .pricingModelIcon,
+.dark .offerIconBox {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .pricingModelName,
+[data-theme="dark"] .offerTitle,
+.dark .pricingModelName,
+.dark .offerTitle {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .pricingModelId,
+[data-theme="dark"] .offerFinePrint,
+.dark .pricingModelId,
+.dark .offerFinePrint {
+  color: #94a3b8 !important;
+}
+
+/* Fix dark text illegibility in pricing rate rows */
+[data-theme="dark"] .pricingRateRow,
+[data-theme="dark"] .resourceCompactItem,
+.dark .pricingRateRow,
+.dark .resourceCompactItem {
+  background: #131d31 !important;
+  border: 1px solid #1e293b !important;
+}
+
+[data-theme="dark"] .rateMeta strong,
+[data-theme="dark"] .resourceCompactItem strong,
+.dark .rateMeta strong,
+.dark .resourceCompactItem strong {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .rateDate,
+[data-theme="dark"] .resourceSubText,
+.dark .rateDate,
+.dark .resourceSubText {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .ratePriceValue,
+.dark .ratePriceValue {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .specialNoticeBox,
+.dark .specialNoticeBox {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .badgeNeutral,
+.dark .badgeNeutral {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+/* CLIENT DETAIL & HISTORIC in dark mode */
+[data-theme="dark"] .card,
+.dark .card {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .serviceBlock,
+.dark .serviceBlock {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .serviceFacts div,
+.dark .serviceFacts div {
+  background: #131d31 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .serviceFacts b,
+.dark .serviceFacts b {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .serviceFacts span,
+.dark .serviceFacts span {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .contactCard p,
+.dark .contactCard p {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .backBtn,
+[data-theme="dark"] .filterBtn,
+[data-theme="dark"] .clientActions button:not(.primary),
+.dark .backBtn,
+.dark .filterBtn,
+.dark .clientActions button:not(.primary) {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .titleLine h1,
+.dark .titleLine h1 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .clientHero p,
+.dark .clientHero p {
+  color: #94a3b8 !important;
+}
+
+/* Drive & Knowledge Explorer */
+[data-theme="dark"] .driveSidebar,
+[data-theme="dark"] .driveMainArea,
+.dark .driveSidebar,
+.dark .driveMainArea {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .driveFolderCard,
+.dark .driveFolderCard {
+  background: #131d31 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .driveFolderCard:hover,
+.dark .driveFolderCard:hover {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Global inputs, selects, textareas */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+.dark input,
+.dark select,
+.dark textarea {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus,
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #ea580c !important;
+  outline: none;
+}
+
+/* Tables in dark mode */
+[data-theme="dark"] .tableWrap table,
+[data-theme="dark"] table,
+.dark .tableWrap table,
+.dark table {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] table thead th,
+.dark table thead th {
+  background: #131d31 !important;
+  color: #94a3b8 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] table tbody tr,
+.dark table tbody tr {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] table tbody tr:hover,
+.dark table tbody tr:hover {
+  background: rgba(30, 41, 59, 0.5) !important;
+}
+
+[data-theme="dark"] table tbody td,
+.dark table tbody td {
+  color: #e2e8f0;
+}
+
+/* Modals & Popovers */
+[data-theme="dark"] .modal,
+[data-theme="dark"] .modalContent,
+[data-theme="dark"] .modalCard,
+.dark .modal,
+.dark .modalContent,
+.dark .modalCard {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .notifPopover,
+.dark .notifPopover {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="dark"] .notifHeader,
+[data-theme="dark"] .notifFooter,
+.dark .notifHeader,
+.dark .notifFooter {
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .notifHeader h3,
+.dark .notifHeader h3 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .notifItem,
+.dark .notifItem {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .notifItem:hover,
+.dark .notifItem:hover {
+  background: #131d31 !important;
+}
+
+[data-theme="dark"] .notifTitleRow strong,
+.dark .notifTitleRow strong {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .notifText,
+.dark .notifText {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .notifBellBtn,
+.dark .notifBellBtn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .notifBellBtn:hover,
+.dark .notifBellBtn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+
 

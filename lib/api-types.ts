@@ -2,7 +2,23 @@ import { previewToken, clearPreviewSession } from "./session";
 import { ApiError } from "./http";
 import { readApiResponse } from "./http";
 import type { Offer, Rate } from "../domain/pricing";
-export type User = { id: string; name: string; permissions: string[] };
+export type User = {
+  id: string;
+  name: string;
+  email?: string;
+  permissions: string[];
+  roles?: string[];
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  name: string;
+  active: boolean;
+  rolePreset: "admin" | "instructor" | "secretary" | "custom";
+  permissions: string[];
+  createdAt: string;
+};
 export type Catalog = {
   rates: Rate[];
   offers: (Offer & { label: string })[];
@@ -146,3 +162,46 @@ export type Resources = {
 };
 
 export type HomeStats = {totalClients:number;todayBookingsCount:number|null;todayMinutes:number|null;todayHours:number|null};
+
+export type DriveItem = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  type: "folder" | "file";
+  mimeType: string | null;
+  size: number;
+  data: string | null;
+  starred: boolean;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  creatorName?: string;
+  creatorEmail?: string;
+  childCount?: number;
+};
+
+export type BreadcrumbItem = {
+  id: string | null;
+  name: string;
+};
+
+export type DriveFolderTreeNode = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  color: string | null;
+  itemCount: number;
+};
+
+export type DriveResponse = {
+  items: DriveItem[];
+  currentFolder: DriveItem | null;
+  breadcrumbs: BreadcrumbItem[];
+  folderTree: DriveFolderTreeNode[];
+  stats: {
+    totalFiles: number;
+    totalFolders: number;
+    totalSizeBytes: number;
+  };
+};

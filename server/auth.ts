@@ -29,19 +29,51 @@ export async function requireUser(permission?: string) {
   const token = await sessionToken();
   if (!token) throw new HttpError(401, "Connexion requise", "AUTH_REQUIRED");
   const result = await db().query(
-    `SELECT u.id,u.name FROM auth_session s JOIN app_user u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`,
+    `SELECT u.id,u.name,u.email FROM auth_session s JOIN app_user u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`,
     [digest(token)],
   );
-  const user = result.rows[0] as { id: string; name: string } | undefined;
+  const user = result.rows[0] as { id: string; name: string; email: string } | undefined;
   if (!user) throw new HttpError(401, "Session expirée", "SESSION_EXPIRED");
-  const perms = await db().query(
-    "SELECT DISTINCT permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1",
-    [user.id],
-  );
-  const permissions = perms.rows.map((r) => r.permission_id as string);
-  if (permission && !permissions.includes(permission))
+
+  // Fetch permissions from both role_permission and user_permission
+  let permsResult;
+  try {
+    permsResult = await db().query(
+      `SELECT DISTINCT permission_id FROM (
+         SELECT rp.permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1
+         UNION
+         SELECT up.permission_id FROM user_permission up WHERE up.user_id=$1
+       ) p`,
+      [user.id],
+    );
+  } catch {
+    permsResult = await db().query(
+      "SELECT DISTINCT permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1",
+      [user.id],
+    );
+  }
+  const permissions = permsResult.rows.map((r) => r.permission_id as string);
+
+  // Check roles
+  const rolesRes = await db().query("SELECT role_id FROM user_role WHERE user_id=$1", [user.id]).catch(() => ({ rows: [] }));
+  const roles = (rolesRes.rows as Array<{ role_id?: string }>).map((r) => String(r.role_id || ""));
+  if (roles.includes("technical_admin") || roles.includes("admin")) {
+    if (!permissions.includes("admin.full")) permissions.push("admin.full");
+    if (!permissions.includes("planning.create")) permissions.push("planning.create");
+    if (!permissions.includes("clients.create")) permissions.push("clients.create");
+    if (!permissions.includes("clients.edit")) permissions.push("clients.edit");
+    if (!permissions.includes("clients.view")) permissions.push("clients.view");
+    if (!permissions.includes("clients.read")) permissions.push("clients.read");
+    if (!permissions.includes("clients.write")) permissions.push("clients.write");
+    if (!permissions.includes("drive.all")) permissions.push("drive.all");
+    if (!permissions.includes("catalog.edit")) permissions.push("catalog.edit");
+  }
+
+  // If user has admin.full or technical_admin, all permissions are granted
+  const isAdmin = permissions.includes("admin.full") || roles.includes("technical_admin");
+  if (permission && !isAdmin && !permissions.includes(permission))
     throw new HttpError(403, "Permission insuffisante", "FORBIDDEN");
-  return { ...user, permissions };
+  return { ...user, permissions, roles };
 }
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");

@@ -75,8 +75,8 @@ export function ClientDetail({
   }
   return (
     <>
-      <button className="backBtn" onClick={back}>
-        <ArrowLeft size={17} /> Clients
+      <button className="backBtn" onClick={back} style={{ color: "#2563eb", fontWeight: 700 }}>
+        <ArrowLeft size={17} /> Retour aux clients
       </button>
       {savedMessage && (
         <p className="success" role="status">
@@ -84,12 +84,12 @@ export function ClientDetail({
         </p>
       )}
       <div className="clientHero">
-        <div className="bigAvatar">
+        <div className="bigAvatar" style={{ background: "#eff6ff", color: "#2563eb", border: "2px solid #dbeafe" }}>
           {d.client.first_name[0]}
           {d.client.last_name[0]}
         </div>
         <div>
-          <p className="eyebrow">FICHE CLIENT</p>
+          <p className="eyebrow" style={{ color: "#2563eb", fontWeight: 700 }}>FICHE ÉLÈVE</p>
           <h1>
             {d.client.first_name} {d.client.last_name}
           </h1>
@@ -98,7 +98,15 @@ export function ClientDetail({
           </p>
         </div>
         {can("services.write") && (
-          <button className="primary" onClick={() => setAdding(true)}>
+          <button
+            className="primary"
+            onClick={() => setAdding(true)}
+            style={{
+              background: "#2563eb",
+              color: "#ffffff",
+              boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
+            }}
+          >
             <Plus size={17} /> Nouvelle prestation
           </button>
         )}

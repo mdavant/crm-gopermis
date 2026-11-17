@@ -329,7 +329,7 @@ export function CalendarGrid() {
           </div>
           <div className="filterList">
             {resources?.vehicles.map((v, i) => {
-              const colors = ["#ea580c", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#f59e0b"];
+              const colors = ["#2563eb", "#3b82f6", "#10b981", "#8b5cf6", "#64748b", "#334155"];
               const dotColor = colors[i % colors.length];
               return (
                 <label key={v.id} className="filterItem">
@@ -399,7 +399,7 @@ export function CalendarGrid() {
                   setSelectedStatus((prev) => ({ ...prev, confirmed: e.target.checked }))
                 }
               />
-              <span className="filterDot" style={{ backgroundColor: "#ea580c" }} />
+              <span className="filterDot" style={{ backgroundColor: "#2563eb" }} />
               <span>Confirmée</span>
             </label>
             <label className="filterItem">
@@ -445,6 +445,7 @@ export function CalendarGrid() {
               <button
                 type="button"
                 className={viewMode === "week" ? "active" : ""}
+                style={viewMode === "week" ? { background: "#2563eb", color: "#ffffff" } : {}}
                 onClick={() => setViewMode("week")}
               >
                 Semaine
@@ -452,6 +453,7 @@ export function CalendarGrid() {
               <button
                 type="button"
                 className={viewMode === "day" ? "active" : ""}
+                style={viewMode === "day" ? { background: "#2563eb", color: "#ffffff" } : {}}
                 onClick={() => setViewMode("day")}
               >
                 Jour
@@ -462,7 +464,12 @@ export function CalendarGrid() {
             {can("schedule.write") && (
               <button
                 type="button"
-                className="btnPrimaryOrange"
+                className="btnPrimary"
+                style={{
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
+                }}
                 onClick={() => setNewBookingOpen(true)}
               >
                 <Plus size={16} strokeWidth={2.5} />
@@ -611,8 +618,8 @@ export function CalendarGrid() {
                   width: "44px",
                   height: "44px",
                   borderRadius: "12px",
-                  background: selectedBooking.status === "completed" ? "#ecfdf5" : "#fff7ed",
-                  color: selectedBooking.status === "completed" ? "#059669" : "#ea580c",
+                  background: selectedBooking.status === "completed" ? "#ecfdf5" : "#eff6ff",
+                  color: selectedBooking.status === "completed" ? "#059669" : "#2563eb",
                   display: "grid",
                   placeItems: "center",
                   fontWeight: 800,

@@ -1,13 +1,13 @@
 "use client";
-import { useEffect, useState, useCallback, type FormEvent } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Home as HomeIcon,
   Users,
   LogOut,
-  Car,
-  WalletCards,
   CalendarDays,
-  Bell,
+  HardDrive,
+  Database,
+  ShieldCheck,
 } from "lucide-react";
 import {
   api,
@@ -19,21 +19,23 @@ import {
   type Resources,
   type HomeStats,
 } from "../lib/api-types";
+import { clearPreviewSession } from "../lib/session";
 import { Modal } from "../components/modal";
 import { Dashboard } from "../components/dashboard";
 import { Schedule } from "../components/schedule";
 import { CalendarSidebar } from "../components/calendar-sidebar";
-import { ResourceSettings } from "../components/resources";
 import { ClientDetail } from "../components/client-detail";
 import { ClientsView } from "../components/clients-view";
-import { PricingView } from "../components/pricing-view";
-import { NotificationsView } from "../components/notifications-view";
 import { ProfileView } from "../components/profile-view";
+import { DriveView } from "../components/drive-view";
+import { DonneesView } from "../components/donnees-view";
+import { ThemeToggle } from "../components/theme-toggle";
+import { AuthGate } from "../components/auth-gate";
+import { AdminPanel } from "../components/admin-panel";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [setupRequired, setSetupRequired] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState<HomeStats | null>(null);
   const [rows, setRows] = useState<ClientRecord[]>([]);
@@ -43,7 +45,7 @@ export default function Home() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [q, setQ] = useState("");
   const [view, setView] = useState<
-    "Accueil" | "Planning" | "Clients" | "Ressources" | "Tarifs & offres" | "Notifications" | "Profil"
+    "Accueil" | "Planning" | "Clients" | "Drive" | "Donnees" | "Profil" | "AdminPanel"
   >("Accueil");
   const [create, setCreate] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -91,19 +93,13 @@ export default function Home() {
 
   useEffect(() => {
     refresh()
-      .catch(async (e) => {
+      .catch((e) => {
         if (
-          e.message === "Connexion requise" ||
-          e.message === "Session expirée"
+          e.message !== "Connexion requise" &&
+          e.message !== "Session expirée"
         ) {
-          try {
-            setSetupRequired(
-              (await api<{ required: boolean }>("setup")).required,
-            );
-          } catch (error) {
-            setError((error as Error).message);
-          }
-        } else setError(e.message);
+          setError(e.message);
+        }
       })
       .finally(() => setLoading(false));
   }, [refresh]);
@@ -139,32 +135,6 @@ export default function Home() {
     }
   }
 
-  async function login(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const values = Object.fromEntries(f);
-      if (setupRequired) {
-        await api("setup", values);
-        setSetupRequired(false);
-      }
-      const res = await api<{ ok: boolean; token?: string; user?: User }>(
-        "login",
-        values,
-      );
-      if (res.user) {
-        setUser(res.user);
-      }
-      await refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (loading)
     return (
       <div className="loading" role="status">
@@ -172,82 +142,23 @@ export default function Home() {
       </div>
     );
 
-  if (!user)
+  if (!user) {
     return (
-      <div className="login">
-        <form className="card" onSubmit={login}>
-          <div className="brandMark">G</div>
-          <p className="eyebrow">GOPERMIS · ESPACE ÉQUIPE</p>
-          <h1>{setupRequired ? "Créer votre accès." : "Bienvenue."}</h1>
-          <p>
-            {setupRequired
-              ? "Premier lancement de l’aperçu privé : créez votre compte administrateur."
-              : "Connectez-vous à votre espace de travail."}
-          </p>
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          {setupRequired && (
-            <label>
-              Nom affiché
-              <input
-                name="name"
-                required
-                maxLength={150}
-                defaultValue="Administrateur GoPermis"
-              />
-            </label>
-          )}
-          <label>
-            Identifiant
-            <input
-              name="identifiant"
-              type="text"
-              autoComplete="username"
-              placeholder="ex: admin"
-              defaultValue="admin"
-              required
-            />
-          </label>
-          <label>
-            Mot de passe
-            <input
-              name="password"
-              type="password"
-              autoComplete={setupRequired ? "new-password" : "current-password"}
-              minLength={setupRequired ? 14 : 1}
-              maxLength={256}
-              placeholder="••••••••••••••••"
-              required
-            />
-          </label>
-          <button className="primary" disabled={busy}>
-            {busy
-              ? "Connexion…"
-              : setupRequired
-                ? "Créer mon compte et me connecter"
-                : "Se connecter"}
-          </button>
-          <div
-            style={{
-              marginTop: 14,
-              padding: "10px 12px",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: 8,
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "#334155",
-              textAlign: "left",
-            }}
-          >
-            Utilisez votre identifiant personnel et votre mot de passe.
-          </div>
-        </form>
-      </div>
+      <AuthGate
+        onAuthenticated={(u) => {
+          setUser(u);
+          void refresh();
+        }}
+      />
     );
+  }
+
+  const isAdmin = Boolean(
+    user.permissions?.includes("admin.full") ||
+    user.permissions?.includes("technical_admin") ||
+    user.roles?.includes("technical_admin") ||
+    user.roles?.includes("admin")
+  );
 
   return (
     <div className="dualAppShell">
@@ -268,14 +179,14 @@ export default function Home() {
 
           <button
             type="button"
-            className={`dockIconBtn ${view === "Tarifs & offres" ? "active" : ""}`}
+            className={`dockIconBtn ${view === "Planning" ? "active" : ""}`}
             onClick={() => {
-              setView("Tarifs & offres");
+              setView("Planning");
               setDetail(null);
             }}
-            title="Tarifs & Offres"
+            title="Planning & Calendrier"
           >
-            <WalletCards size={19} />
+            <CalendarDays size={19} />
           </button>
 
           <button
@@ -292,41 +203,43 @@ export default function Home() {
 
           <button
             type="button"
-            className={`dockIconBtn ${view === "Planning" ? "active" : ""}`}
+            className={`dockIconBtn ${view === "Drive" ? "active" : ""}`}
             onClick={() => {
-              setView("Planning");
+              setView("Drive");
               setDetail(null);
             }}
-            title="Planning & Calendrier"
+            title="Drive & Documents"
           >
-            <CalendarDays size={19} />
+            <HardDrive size={19} />
           </button>
 
           <button
             type="button"
-            className={`dockIconBtn ${view === "Ressources" ? "active" : ""}`}
+            className={`dockIconBtn ${view === "Donnees" ? "active" : ""}`}
             onClick={() => {
-              setView("Ressources");
+              setView("Donnees");
               setDetail(null);
             }}
-            title="Véhicules & Moniteurs"
+            title="Données (Tarifs & Véhicules)"
           >
-            <Car size={19} />
+            <Database size={19} />
           </button>
 
-          <button
-            type="button"
-            className={`dockIconBtn ${view === "Notifications" ? "active" : ""}`}
-            onClick={() => {
-              setView("Notifications");
-              setDetail(null);
-            }}
-            title="Notifications"
-          >
-            <Bell size={19} />
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className={`dockIconBtn ${view === "AdminPanel" ? "active" : ""}`}
+              onClick={() => {
+                setView("AdminPanel");
+                setDetail(null);
+              }}
+              title="Panel Admin (Gestion des profils & permissions)"
+            >
+              <ShieldCheck size={19} />
+            </button>
+          )}
 
-          {/* User Profile Avatar directly beneath icons in the centered stack */}
+          {/* User Profile Avatar directly beneath icons */}
           <div
             className={`dockUserAvatar ${view === "Profil" ? "active" : ""}`}
             title={`${user.name} (Gérer mon profil)`}
@@ -338,8 +251,10 @@ export default function Home() {
             <span>{user.name.slice(0, 2).toUpperCase()}</span>
             <div className="dockStatusDot" />
           </div>
+        </nav>
 
-          {/* Discrete Logout Button */}
+        {/* Bottom container: Anchored at the very bottom, separated from the rest */}
+        <div className="dockBottom">
           <button
             type="button"
             className="dockIconBtn"
@@ -347,6 +262,7 @@ export default function Home() {
             onClick={async () => {
               try {
                 await api("logout", {});
+                clearPreviewSession();
                 setUser(null);
                 setDetail(null);
                 setRows([]);
@@ -357,7 +273,10 @@ export default function Home() {
           >
             <LogOut size={16} />
           </button>
-        </nav>
+
+          {/* Sun / Moon Theme Switcher at the very bottom of the rail */}
+          <ThemeToggle compact />
+        </div>
       </aside>
 
       {/* 2. Secondary Sidebar Panel (Only in Planning view matching reference image) */}
@@ -437,18 +356,19 @@ export default function Home() {
               />
             ))}
 
-          {/* VIEW: RESSOURCES (VEHICULES & MONITEURS) */}
-          {view === "Ressources" && cat && can("schedule.read") && (
-            <ResourceSettings can={can} cat={cat} />
+          {/* VIEW: DRIVE & DOCUMENTS */}
+          {view === "Drive" && (
+            <div style={{ padding: "16px 20px" }}>
+              <DriveView />
+            </div>
           )}
 
-          {/* VIEW: TARIFS & OFFRES (EDITABLE) */}
-          {view === "Tarifs & offres" && cat && (
-            <PricingView cat={cat} can={can} onRefresh={refresh} />
+          {/* VIEW: DONNÉES (COMBINÉ TARIFS & RESSOURCES) */}
+          {view === "Donnees" && (
+            <div style={{ padding: "28px 36px" }}>
+              <DonneesView cat={cat} can={can} onRefresh={refresh} />
+            </div>
           )}
-
-          {/* VIEW: NOTIFICATIONS */}
-          {view === "Notifications" && <NotificationsView />}
 
           {/* VIEW: PROFIL */}
           {view === "Profil" && (
@@ -458,6 +378,7 @@ export default function Home() {
               onLogout={async () => {
                 try {
                   await api("logout", {});
+                  clearPreviewSession();
                   setUser(null);
                   setDetail(null);
                   setRows([]);
@@ -465,6 +386,14 @@ export default function Home() {
                   setError((e as Error).message);
                 }
               }}
+            />
+          )}
+
+          {/* VIEW: ADMIN PANEL */}
+          {view === "AdminPanel" && isAdmin && (
+            <AdminPanel
+              currentUser={user}
+              onBackToDashboard={() => setView("Accueil")}
             />
           )}
         </div>

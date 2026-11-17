@@ -19,6 +19,8 @@ interface AppContextType {
   openNewBookingWithClient: (clientId?: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  theme: "light" | "dark";
+  toggleTheme: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -31,7 +33,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [selectedClientIdForBooking, setSelectedClientIdForBooking] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("gopermis-theme") as "light" | "dark" | null;
+      const initial = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      setTheme(initial);
+      document.documentElement.setAttribute("data-theme", initial);
+      if (initial === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } catch {
+      // fallback
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      try {
+        localStorage.setItem("gopermis-theme", next);
+        document.documentElement.setAttribute("data-theme", next);
+        if (next === "dark") {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {
+        // fallback
+      }
+      return next;
+    });
+  }, []);
 
   const can = useCallback((p: string) => user?.permissions.includes(p) ?? false, [user]);
 
@@ -95,6 +132,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         openNewBookingWithClient,
         sidebarOpen,
         setSidebarOpen,
+        theme,
+        toggleTheme,
       }}
     >
       {children}

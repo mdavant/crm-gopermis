@@ -70,7 +70,16 @@ export function ClientsView({
         </div>
 
         {can("clients.write") && (
-          <button type="button" className="btnPrimary" onClick={onNewClient}>
+          <button
+            type="button"
+            className="btnPrimary"
+            onClick={onNewClient}
+            style={{
+              background: "#2563eb",
+              color: "#ffffff",
+              boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
+            }}
+          >
             <Plus size={16} />
             <span>Nouveau client</span>
           </button>
@@ -86,8 +95,8 @@ export function ClientsView({
 
       {/* Filter and Search Bar */}
       <div className="clientsToolbar">
-        <div className="searchBarContainer">
-          <Search size={16} className="searchIcon" />
+        <div className="searchBarContainer" style={{ borderColor: "#cbd5e1" }}>
+          <Search size={16} className="searchIcon" style={{ color: "#2563eb" }} />
           <input
             type="text"
             placeholder="Rechercher par nom, prénom, téléphone ou email…"
@@ -101,6 +110,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "all" ? "active" : ""}`}
+            style={filter === "all" ? { background: "#2563eb", color: "#ffffff" } : {}}
             onClick={() => setFilter("all")}
           >
             Tous ({clients.length})
@@ -108,6 +118,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "active" ? "active" : ""}`}
+            style={filter === "active" ? { background: "#2563eb", color: "#ffffff" } : {}}
             onClick={() => setFilter("active")}
           >
             Actifs ({clients.filter((c) => c.status !== "Archivé").length})
@@ -115,6 +126,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "archived" ? "active" : ""}`}
+            style={filter === "archived" ? { background: "#2563eb", color: "#ffffff" } : {}}
             onClick={() => setFilter("archived")}
           >
             Archivés ({clients.filter((c) => c.status === "Archivé").length})
@@ -166,7 +178,15 @@ export function ClientsView({
                   >
                     <td>
                       <div className="clientInfoCell">
-                        <div className="clientAvatarCell">
+                        <div
+                          className="clientAvatarCell"
+                          style={{
+                            background: "#eff6ff",
+                            color: "#2563eb",
+                            fontWeight: 800,
+                            border: "1px solid #dbeafe",
+                          }}
+                        >
                           {c.first_name[0]}
                           {c.last_name[0]}
                         </div>
@@ -182,11 +202,11 @@ export function ClientsView({
                     <td>
                       <div className="contactMeta">
                         <span className="contactRow">
-                          <Phone size={13} /> {c.phone}
+                          <Phone size={13} style={{ color: "#2563eb" }} /> {c.phone}
                         </span>
                         {c.email && (
                           <span className="contactRow subEmail">
-                            <Mail size={13} /> {c.email}
+                            <Mail size={13} style={{ color: "#2563eb" }} /> {c.email}
                           </span>
                         )}
                       </div>
@@ -217,7 +237,7 @@ export function ClientsView({
                             <Trash2 size={14} />
                           </button>
                         )}
-                        <span className="openFileBtn">
+                        <span className="openFileBtn" style={{ color: "#2563eb", fontWeight: 700 }}>
                           Ouvrir <ChevronRight size={14} />
                         </span>
                       </div>

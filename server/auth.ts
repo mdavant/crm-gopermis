@@ -1,17 +1,26 @@
 import { cookies, headers } from "next/headers";
 import { createHash } from "node:crypto";
 import { db } from "./db";
+import { isMysqlMode, mysqlQuery } from "./mysql.mjs";
+import { HttpError } from "./errors.mjs";
+
+export { HttpError };
+
+export type CrmRole = "admin" | "manager" | "instructor" | "staff";
+
+export type AuthenticatedUser = {
+  id: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  permissions: string[];
+  roles: string[];
+};
+
 export const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
-export class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public code = "REQUEST_FAILED",
-  ) {
-    super(message);
-  }
-}
+
 export function previewMode() {
   return (
     process.env.APP_ENV === "preview" ||
@@ -20,24 +29,131 @@ export function previewMode() {
       process.env.ALLOW_PREVIEW_SETUP === "1")
   );
 }
+
 export async function sessionToken() {
   const bearer = (await headers()).get("authorization");
   if (previewMode() && bearer?.startsWith("Bearer ")) return bearer.slice(7);
   return (await cookies()).get("gopermis_session")?.value;
 }
-export async function requireUser(permission?: string) {
+
+export async function clientIpAddress(request?: Request): Promise<string | null> {
+  try {
+    const hdrs = request ? request.headers : await headers();
+    const fwd = hdrs.get("x-forwarded-for");
+    if (fwd) return fwd.split(",")[0].trim().slice(0, 64);
+    const real = hdrs.get("x-real-ip");
+    if (real) return real.trim().slice(0, 64);
+  } catch {
+    // Ignore when called outside request context
+  }
+  return null;
+}
+
+function expandPermissionAliases(perms: Set<string>) {
+  if (perms.has("admin.full")) {
+    for (const p of [
+      "admin.full",
+      "clients.read",
+      "clients.write",
+      "clients.view",
+      "clients.create",
+      "clients.edit",
+      "services.write",
+      "payments.read",
+      "payments.write",
+      "audit.read",
+      "schedule.read",
+      "schedule.write",
+      "planning.create",
+      "sessions.complete",
+      "resources.write",
+      "catalog.write",
+      "catalog.edit",
+      "drive.all",
+      "documents.read",
+      "documents.write",
+    ]) {
+      perms.add(p);
+    }
+  }
+  if (perms.has("clients.view")) perms.add("clients.read");
+  if (perms.has("clients.edit") || perms.has("clients.create")) {
+    perms.add("clients.write");
+  }
+  if (perms.has("planning.create")) {
+    perms.add("schedule.read");
+    perms.add("schedule.write");
+  }
+  if (perms.has("catalog.edit")) perms.add("catalog.write");
+}
+
+export async function requireUser(
+  permission?: string,
+): Promise<AuthenticatedUser> {
   const token = await sessionToken();
   if (!token) throw new HttpError(401, "Connexion requise", "AUTH_REQUIRED");
+  const tokenHash = digest(token);
+
+  if (isMysqlMode()) {
+    const userRows = (await mysqlQuery(
+      `SELECT u.id, u.first_name, u.last_name, u.name, u.email, u.role
+       FROM auth_sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP(3) AND u.is_active = 1
+       LIMIT 1`,
+      [tokenHash],
+    )) as Record<string, unknown>[];
+
+    const u = userRows[0];
+    if (!u) throw new HttpError(401, "Session expirée", "SESSION_EXPIRED");
+
+    const userId = String(u.id);
+    const role = String(u.role || "staff");
+    const roles = role === "admin" ? ["admin", "technical_admin"] : [role];
+
+    const permRows = (await mysqlQuery(
+      `SELECT permission_name FROM role_permissions WHERE role_name = ?
+       UNION
+       SELECT permission_name FROM user_permissions WHERE user_id = ?`,
+      [role, userId],
+    )) as Record<string, unknown>[];
+
+    const permSet = new Set<string>(
+      permRows.map((r) => String(r.permission_name)),
+    );
+    expandPermissionAliases(permSet);
+    const permissions = Array.from(permSet);
+
+    if (permission && !permSet.has("admin.full") && !permSet.has(permission)) {
+      throw new HttpError(403, "Permission insuffisante", "FORBIDDEN");
+    }
+
+    return {
+      id: userId,
+      name: String(u.name),
+      firstName: String(u.first_name || ""),
+      lastName: String(u.last_name || ""),
+      email: String(u.email),
+      permissions,
+      roles,
+    };
+  }
+
   const result = await db().query(
     `SELECT u.id,u.name,u.email FROM auth_session s JOIN app_user u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`,
-    [digest(token)],
+    [tokenHash],
   );
-  const user = result.rows[0] as { id: string; name: string; email: string } | undefined;
+  const user = result.rows[0] as
+    | { id: string; name: string; email: string }
+    | undefined;
   if (!user) throw new HttpError(401, "Session expirée", "SESSION_EXPIRED");
 
-  // Fetch permissions from both role_permission and user_permission
   let permsResult;
-  try {
+  const hasUp = await db()
+    .query("SELECT to_regclass('public.user_permission') IS NOT NULL AS ok")
+    .then((r) => Boolean(r.rows[0]?.ok))
+    .catch(() => false);
+  if (hasUp) {
     permsResult = await db().query(
       `SELECT DISTINCT permission_id FROM (
          SELECT rp.permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1
@@ -46,35 +162,30 @@ export async function requireUser(permission?: string) {
        ) p`,
       [user.id],
     );
-  } catch {
+  } else {
     permsResult = await db().query(
       "SELECT DISTINCT permission_id FROM user_role ur JOIN role_permission rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1",
       [user.id],
     );
   }
-  const permissions = permsResult.rows.map((r) => r.permission_id as string);
+  const permSet = new Set<string>(
+    permsResult.rows.map((r) => r.permission_id as string),
+  );
 
-  // Check roles
-  const rolesRes = await db().query("SELECT role_id FROM user_role WHERE user_id=$1", [user.id]).catch(() => ({ rows: [] }));
-  const roles = (rolesRes.rows as Array<{ role_id?: string }>).map((r) => String(r.role_id || ""));
-  if (roles.includes("technical_admin") || roles.includes("admin")) {
-    if (!permissions.includes("admin.full")) permissions.push("admin.full");
-    if (!permissions.includes("planning.create")) permissions.push("planning.create");
-    if (!permissions.includes("clients.create")) permissions.push("clients.create");
-    if (!permissions.includes("clients.edit")) permissions.push("clients.edit");
-    if (!permissions.includes("clients.view")) permissions.push("clients.view");
-    if (!permissions.includes("clients.read")) permissions.push("clients.read");
-    if (!permissions.includes("clients.write")) permissions.push("clients.write");
-    if (!permissions.includes("drive.all")) permissions.push("drive.all");
-    if (!permissions.includes("catalog.edit")) permissions.push("catalog.edit");
-  }
+  const rolesRes = await db()
+    .query("SELECT role_id FROM user_role WHERE user_id=$1", [user.id])
+    .catch(() => ({ rows: [] }));
+  const roles = (rolesRes.rows as Array<{ role_id?: string }>).map((r) =>
+    String(r.role_id || ""),
+  );
+  expandPermissionAliases(permSet);
+  const permissions = Array.from(permSet);
 
-  // If user has admin.full or technical_admin, all permissions are granted
-  const isAdmin = permissions.includes("admin.full") || roles.includes("technical_admin");
-  if (permission && !isAdmin && !permissions.includes(permission))
+  if (permission && !permSet.has("admin.full") && !permSet.has(permission))
     throw new HttpError(403, "Permission insuffisante", "FORBIDDEN");
   return { ...user, permissions, roles };
 }
+
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin)

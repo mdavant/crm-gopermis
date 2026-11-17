@@ -1,9 +1,12 @@
 import { z } from "zod";
 import { db } from "./db";
+import { isMysqlMode } from "./mysql.mjs";
 import { HttpError } from "./auth";
 import { createAccount } from "./accounts.mjs";
-/** Initial setup is for private development previews only, never PostgreSQL/team deployments. */
+
+/** Initial setup is for private development previews only, never PostgreSQL/MySQL production deployments. */
 function allowed() {
+  if (isMysqlMode()) return false;
   const embedded =
     process.env.DATABASE_MODE === "pglite" ||
     (!process.env.DATABASE_MODE && !process.env.DATABASE_URL);
@@ -13,12 +16,14 @@ function allowed() {
       process.env.ALLOW_PREVIEW_SETUP === "1")
   );
 }
+
 export async function setupStatus() {
   if (!allowed()) return { required: false };
   return {
     required: !(await db().query("SELECT 1 FROM app_user LIMIT 1")).rowCount,
   };
 }
+
 export async function setupAccount(raw: unknown) {
   if (!allowed())
     throw new HttpError(403, "Création initiale réservée à l’aperçu privé.");

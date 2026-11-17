@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import { db } from "./db";
+import { isMysqlMode, mysqlQuery, mysqlTransaction } from "./mysql.mjs";
 import { quote, type Rate, type Offer } from "../domain/pricing";
 import { HttpError } from "./auth";
+
 export const clientInput = z.object({
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
@@ -13,8 +16,11 @@ export const clientInput = z.object({
     .max(30)
     .regex(/^[+\d ().-]+$/),
   email: z.union([z.email(), z.literal("")]).optional(),
+  address: z.string().trim().max(255).optional(),
+  notes: z.string().trim().max(5000).optional(),
   source: z.string().trim().min(1).max(100).default("Saisie manuelle"),
 });
+
 export const serviceInput = z.object({
   typeId: z.string().min(1).max(80),
   model: z.string().min(1),
@@ -22,11 +28,13 @@ export const serviceInput = z.object({
   minutes: z.number().int().positive().max(60000),
   offerId: z.string().optional(),
 });
+
 export const paymentInput = z.object({
   amountCents: z.number().int().positive().max(100000000),
   method: z.enum(["Carte", "Virement", "Espèces"]),
   requestId: z.uuid(),
 });
+
 export async function transaction<T>(fn: (c: PoolClient) => Promise<T>) {
   const c = await db().connect();
   try {
@@ -41,6 +49,7 @@ export async function transaction<T>(fn: (c: PoolClient) => Promise<T>) {
     c.release();
   }
 }
+
 export async function audit(
   c: PoolClient,
   actor: string,
@@ -53,7 +62,35 @@ export async function audit(
     [actor, action, id, JSON.stringify(details)],
   );
 }
+
+function parseJsonCol<T>(val: unknown): T {
+  if (typeof val === "string") return JSON.parse(val) as T;
+  return val as T;
+}
+
 export async function catalog() {
+  if (isMysqlMode()) {
+    const [rates, offers, types, models] = await Promise.all([
+      mysqlQuery(
+        `SELECT id, model, support, cents, DATE_FORMAT(valid_from, '%Y-%m-%d') AS validFrom, DATE_FORMAT(valid_to, '%Y-%m-%d') AS validTo FROM tariff_versions`,
+      ),
+      mysqlQuery(
+        `SELECT id, label, paid_minutes AS paidMinutes, bonus_minutes AS bonusMinutes, single_payment AS singlePayment FROM offers WHERE active = 1`,
+      ),
+      mysqlQuery(`SELECT id, label, pricing_mode FROM service_types WHERE active = 1`),
+      mysqlQuery(`SELECT id, label FROM vehicle_models`),
+    ]);
+    return {
+      rates: rates as Rate[],
+      offers: (offers as Array<Record<string, unknown>>).map((o) => ({
+        ...o,
+        singlePayment: Boolean(o.singlePayment),
+      })) as (Offer & { label: string })[],
+      types: types as { id: string; label: string; pricing_mode: string }[],
+      models: models as { id: string; label: string }[],
+    };
+  }
+
   const [rates, offers, types, models] = await Promise.all([
     db().query(
       `SELECT id,model,support,cents,to_char(valid_from,'YYYY-MM-DD') AS "validFrom",to_char(valid_to,'YYYY-MM-DD') AS "validTo" FROM tariff_version`,
@@ -71,12 +108,65 @@ export async function catalog() {
     models: models.rows as { id: string; label: string }[],
   };
 }
+
 export async function detail(
   id: string,
   financial: boolean,
   auditAllowed: boolean,
 ) {
   z.uuid().parse(id);
+
+  if (isMysqlMode()) {
+    const clientRows = (await mysqlQuery("SELECT * FROM clients WHERE id = ? LIMIT 1", [
+      id,
+    ])) as Record<string, unknown>[];
+    if (!clientRows.length) throw new HttpError(404, "Client introuvable");
+
+    const [services, ledger, notes, payments, history] = await Promise.all([
+      mysqlQuery(
+        "SELECT s.*, t.label FROM services s JOIN service_types t ON t.id = s.type_id WHERE s.client_id = ? ORDER BY s.created_at DESC",
+        [id],
+      ),
+      mysqlQuery(
+        "SELECT h.* FROM hour_ledger h JOIN services s ON s.id = h.service_id WHERE s.client_id = ? ORDER BY h.created_at ASC",
+        [id],
+      ),
+      mysqlQuery(
+        "SELECT n.*, u.name AS author FROM client_notes n JOIN users u ON u.id = n.created_by WHERE n.client_id = ? ORDER BY n.created_at DESC",
+        [id],
+      ),
+      financial
+        ? mysqlQuery(
+            "SELECT p.* FROM payments p JOIN services s ON s.id = p.service_id WHERE s.client_id = ? ORDER BY p.created_at DESC",
+            [id],
+          )
+        : Promise.resolve([]),
+      auditAllowed
+        ? mysqlQuery(
+            `SELECT a.action, a.created_at, COALESCE(u.name, 'Système') AS actor
+             FROM audit_logs a
+             LEFT JOIN users u ON u.id = a.user_id
+             WHERE a.entity_id = ?
+                OR a.entity_id IN (SELECT id FROM services WHERE client_id = ?)
+             ORDER BY a.created_at DESC LIMIT 50`,
+            [id, id],
+          )
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      client: clientRows[0],
+      services: (services as Record<string, unknown>[]).map((s) => ({
+        ...s,
+        price_snapshot: parseJsonCol(s.price_snapshot),
+      })),
+      ledger,
+      notes,
+      payments,
+      history,
+    };
+  }
+
   const client = await db().query("SELECT * FROM client WHERE id=$1", [id]);
   if (!client.rowCount) throw new HttpError(404, "Client introuvable");
   const [services, ledger, notes, payments, history] = await Promise.all([
@@ -114,6 +204,7 @@ export async function detail(
     history: history.rows,
   };
 }
+
 export async function createService(
   clientId: string,
   raw: unknown,
@@ -139,6 +230,35 @@ export async function createService(
   } catch (e) {
     throw new HttpError(422, (e as Error).message);
   }
+
+  if (isMysqlMode()) {
+    const id = randomUUID();
+    return mysqlTransaction(async (conn) => {
+      const [cl] = await conn.execute(
+        "SELECT id FROM clients WHERE id = ? FOR UPDATE",
+        [clientId],
+      );
+      if (!Array.isArray(cl) || cl.length === 0) {
+        throw new HttpError(404, "Client introuvable");
+      }
+      await conn.execute(
+        "INSERT INTO services (id, client_id, type_id, price_snapshot) VALUES (?, ?, ?, ?)",
+        [id, clientId, x.typeId, JSON.stringify(snapshot)],
+      );
+      await conn.execute("UPDATE clients SET status = 'Actif' WHERE id = ?", [
+        clientId,
+      ]);
+      await conn.execute(
+        `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+         VALUES (?, ?, 'service.created', 'service', ?, ?)`,
+        [randomUUID(), actor, id, JSON.stringify({ snapshot })],
+      );
+      const [created] = await conn.execute("SELECT * FROM services WHERE id = ?", [id]);
+      const row = (created as Record<string, unknown>[])[0];
+      return { ...row, price_snapshot: parseJsonCol(row.price_snapshot) };
+    });
+  }
+
   return transaction(async (c) => {
     if (
       !(
@@ -157,6 +277,7 @@ export async function createService(
     return s.rows[0];
   });
 }
+
 export async function recordPayment(
   serviceId: string,
   raw: unknown,
@@ -164,6 +285,86 @@ export async function recordPayment(
 ) {
   z.uuid().parse(serviceId);
   const x = paymentInput.parse(raw);
+
+  if (isMysqlMode()) {
+    return mysqlTransaction(async (conn) => {
+      const [found] = await conn.execute(
+        "SELECT * FROM services WHERE id = ? FOR UPDATE",
+        [serviceId],
+      );
+      const s = (found as Record<string, unknown>[])[0];
+      if (!s) throw new HttpError(404, "Prestation introuvable");
+      const snapshot = parseJsonCol<{
+        totalCents: number;
+        paidMinutes: number;
+        potentialBonusMinutes: number;
+      }>(s.price_snapshot);
+
+      const [prev] = await conn.execute(
+        "SELECT * FROM payments WHERE request_id = ? LIMIT 1",
+        [x.requestId],
+      );
+      if (Array.isArray(prev) && prev.length > 0) {
+        const p = prev[0] as Record<string, unknown>;
+        if (
+          p.service_id !== serviceId ||
+          Number(p.amount_cents) !== x.amountCents ||
+          p.method !== x.method
+        ) {
+          throw new HttpError(409, "Clé de paiement déjà utilisée");
+        }
+        return p;
+      }
+
+      const [sumRows] = await conn.execute(
+        "SELECT COALESCE(SUM(amount_cents), 0) AS total, COUNT(*) AS count FROM payments WHERE service_id = ?",
+        [serviceId],
+      );
+      const paid = (sumRows as Record<string, unknown>[])[0];
+      const paidTotal = Number(paid.total || 0);
+      const paidCount = Number(paid.count || 0);
+
+      if (paidTotal + x.amountCents > snapshot.totalCents) {
+        throw new HttpError(422, "Le paiement dépasse le montant restant dû");
+      }
+
+      const paymentId = randomUUID();
+      await conn.execute(
+        "INSERT INTO payments (id, service_id, amount_cents, method, created_by, request_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [paymentId, serviceId, x.amountCents, x.method, actor, x.requestId],
+      );
+
+      if (paidTotal + x.amountCents === snapshot.totalCents) {
+        await conn.execute(
+          "INSERT INTO hour_ledger (id, service_id, minutes, kind, reason, created_by) VALUES (?, ?, ?, 'purchase', 'Prestation intégralement payée', ?)",
+          [randomUUID(), serviceId, snapshot.paidMinutes, actor],
+        );
+        if (paidCount === 0 && snapshot.potentialBonusMinutes > 0) {
+          await conn.execute(
+            "INSERT INTO hour_ledger (id, service_id, minutes, kind, reason, created_by) VALUES (?, ?, ?, 'bonus', 'Forfait payé en une fois', ?)",
+            [randomUUID(), serviceId, snapshot.potentialBonusMinutes, actor],
+          );
+        }
+      }
+
+      await conn.execute(
+        `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+         VALUES (?, ?, 'payment.recorded', 'service', ?, ?)`,
+        [
+          randomUUID(),
+          actor,
+          serviceId,
+          JSON.stringify({ paymentId, amountCents: x.amountCents }),
+        ],
+      );
+
+      const [created] = await conn.execute("SELECT * FROM payments WHERE id = ?", [
+        paymentId,
+      ]);
+      return (created as Record<string, unknown>[])[0];
+    });
+  }
+
   return transaction(async (c) => {
     const found = await c.query(
       "SELECT * FROM service WHERE id=$1 FOR UPDATE",
@@ -233,31 +434,79 @@ export async function updateCatalog(raw: unknown, actor: string) {
     ])
     .parse(raw);
 
+  if (isMysqlMode()) {
+    return mysqlTransaction(async (conn) => {
+      if (x.kind === "rate") {
+        const [res] = await conn.execute(
+          "UPDATE tariff_versions SET cents = ? WHERE id = ?",
+          [x.cents, x.id],
+        );
+        if ((res as { affectedRows?: number }).affectedRows === 0) {
+          throw new HttpError(404, "Tarif introuvable");
+        }
+      } else {
+        const [res] = await conn.execute(
+          "UPDATE offers SET label = ?, paid_minutes = ?, bonus_minutes = ? WHERE id = ?",
+          [x.label, x.paidMinutes, x.bonusMinutes, x.id],
+        );
+        if ((res as { affectedRows?: number }).affectedRows === 0) {
+          throw new HttpError(404, "Offre introuvable");
+        }
+      }
+      await conn.execute(
+        `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+         VALUES (?, ?, 'catalog.updated', 'catalog', ?, ?)`,
+        [randomUUID(), actor, x.id, JSON.stringify({ kind: x.kind })],
+      );
+      return { ok: true };
+    });
+  }
+
   return transaction(async (c) => {
     if (x.kind === "rate") {
-      const updated=await c.query("UPDATE tariff_version SET cents = $1 WHERE id = $2 RETURNING id", [
-        x.cents,
-        x.id,
-      ]);
-      if(!updated.rowCount) throw new HttpError(404,"Tarif introuvable");
+      const updated = await c.query(
+        "UPDATE tariff_version SET cents = $1 WHERE id = $2 RETURNING id",
+        [x.cents, x.id],
+      );
+      if (!updated.rowCount) throw new HttpError(404, "Tarif introuvable");
     } else {
-      const updated=await c.query(
+      const updated = await c.query(
         "UPDATE offer SET label = $1, paid_minutes = $2, bonus_minutes = $3 WHERE id = $4 RETURNING id",
         [x.label, x.paidMinutes, x.bonusMinutes, x.id],
       );
-      if(!updated.rowCount) throw new HttpError(404,"Offre introuvable");
+      if (!updated.rowCount) throw new HttpError(404, "Offre introuvable");
     }
-    await audit(c, actor, "catalog.updated", actor, { kind: x.kind, catalogId:x.id });
+    await audit(c, actor, "catalog.updated", actor, { kind: x.kind, catalogId: x.id });
     return { ok: true };
   });
 }
 
 export async function deleteClient(id: string, actor: string) {
   const validId = z.string().uuid().parse(id);
+
+  if (isMysqlMode()) {
+    return mysqlTransaction(async (conn) => {
+      const [res] = await conn.execute(
+        "UPDATE clients SET status = 'Archivé', version = version + 1 WHERE id = ? AND status <> 'Archivé'",
+        [validId],
+      );
+      if ((res as { affectedRows?: number }).affectedRows) {
+        await conn.execute(
+          `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+           VALUES (?, ?, 'client.archived', 'client', ?, '{}')`,
+          [randomUUID(), actor, validId],
+        );
+      }
+      return { ok: true };
+    });
+  }
+
   return transaction(async (c) => {
-    const result=await c.query("UPDATE client SET status='Archivé',version=version+1,updated_at=now() WHERE id=$1 AND status<>'Archivé' RETURNING id",[validId]);
-    if(result.rowCount) await audit(c,actor,"client.archived",validId);
+    const result = await c.query(
+      "UPDATE client SET status='Archivé',version=version+1,updated_at=now() WHERE id=$1 AND status<>'Archivé' RETURNING id",
+      [validId],
+    );
+    if (result.rowCount) await audit(c, actor, "client.archived", validId);
     return { ok: true };
   });
 }
-

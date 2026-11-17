@@ -248,8 +248,11 @@ test(
       );
       await schedulingScenario(request, db, service, second, client, !!native);
       await directoryScenario(request, db, client, !!native);
+      await documentsAndSecurityScenario(request, env.APP_ORIGIN, cookie, client);
+      assert.equal(logs.includes("fictitious-test-password"), false);
       // Remove role while session exists: server must immediately deny access.
       await db.query("DELETE FROM user_role");
+      await db.query("DELETE FROM user_permission").catch(() => {});
       await request("clients", undefined, 403);
       await request("logout", {});
       await request("me", undefined, 401);
@@ -671,3 +674,97 @@ async function directoryScenario(request, db, client, native) {
     assert.deepEqual(updates.map((r) => r.httpStatus).sort(), [200, 409]);
   }
 }
+
+async function documentsAndSecurityScenario(request, appOrigin, adminCookie, client) {
+  const health = await request("health");
+  assert.equal(health.ok, true);
+
+  const folder = await request(
+    `clients/${client.id}/folders`,
+    { name: "Dossier Permis", description: "Pièces confidentielles" },
+    201,
+  );
+  const folders = await request(`clients/${client.id}/folders`);
+  assert.ok(folders.some((f) => f.id === folder.id));
+
+  const pdfPayload = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF");
+  const uploaded = await request(
+    `clients/${client.id}/documents`,
+    {
+      folderId: folder.id,
+      originalName: "piece_identite.pdf",
+      mimeType: "application/pdf",
+      isPrivate: true,
+      contentBase64: pdfPayload.toString("base64"),
+    },
+    201,
+  );
+  assert.equal(uploaded.is_private, true);
+  assert.equal(uploaded.storage_path.includes(".."), false);
+
+  // Path traversal and forbidden extension / MIME blocked
+  await request(
+    `clients/${client.id}/documents`,
+    {
+      originalName: "../../evil.php",
+      mimeType: "application/x-httpd-php",
+      contentBase64: Buffer.from("<?php echo 1;").toString("base64"),
+    },
+    400,
+  );
+  await request(
+    `clients/${client.id}/documents`,
+    {
+      originalName: "script.sh",
+      mimeType: "application/x-sh",
+      contentBase64: Buffer.from("#!/bin/sh").toString("base64"),
+    },
+    415,
+  );
+
+  // Authorized admin download returns exact file bytes
+  const adminDl = await fetch(`${appOrigin}/api/documents/${uploaded.id}/download`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(adminDl.status, 200);
+  const dlBytes = Buffer.from(await adminDl.arrayBuffer());
+  assert.deepEqual(dlBytes, pdfPayload);
+
+  // Create limited instructor account without documents.read / admin.full
+  const limitedEmail = `moniteur.${randomUUID().slice(0, 6)}@example.test`;
+  const limitedPassword = "InstructorTestPassword!2026";
+  await request(
+    "admin/users",
+    {
+      email: limitedEmail,
+      name: "Moniteur Sans Accès Doc",
+      password: limitedPassword,
+      rolePreset: "instructor",
+      permissions: ["clients.read", "schedule.read"],
+    },
+    201,
+  );
+
+  const loginRes = await fetch(`${appOrigin}/api/auth/login`, {
+    method: "POST",
+    headers: { origin: appOrigin, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: limitedEmail, password: limitedPassword }),
+  });
+  assert.equal(loginRes.status, 200);
+  const limitedCookie = (loginRes.headers.get("set-cookie") || "").split(";")[0];
+
+  // Limited user cannot access admin panel or download private document (403)
+  const adminForbidden = await fetch(`${appOrigin}/api/admin/users`, {
+    headers: { cookie: limitedCookie },
+  });
+  assert.equal(adminForbidden.status, 403);
+
+  const docForbidden = await fetch(`${appOrigin}/api/documents/${uploaded.id}/download`, {
+    headers: { cookie: limitedCookie },
+  });
+  assert.equal(docForbidden.status, 403);
+
+  // Clean up test file from disk
+  await request(`documents/${uploaded.id}/delete`, {});
+}
+

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { authenticationStatus, loginAccount, registerAccount, logoutAccount, changePassword } from "../../../server/authentication";
 import { listClients, createClient, searchClients, updateClient } from "../../../server/clients";
 import { z, ZodError } from "zod";
@@ -7,6 +8,17 @@ import {
   HttpError,
   checkOrigin,
 } from "../../../server/auth";
+import { isMysqlMode, mysqlTransaction, testMysqlConnection } from "../../../server/mysql.mjs";
+import { db } from "../../../server/db";
+import { redactSensitive, splitFullName } from "../../../server/accounts.mjs";
+import {
+  listClientFolders,
+  createClientFolder,
+  listDocuments,
+  uploadDocument,
+  getAuthorizedDocument,
+  deleteDocument,
+} from "../../../server/documents";
 import {
   catalog,
   detail,
@@ -65,6 +77,21 @@ async function handle(
         throw new HttpError(400, "JSON invalide");
       }
     };
+    const clientIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      null;
+    if (route === "health" && !isPost) {
+      if (isMysqlMode()) {
+        const res = await testMysqlConnection();
+        return NextResponse.json(
+          { ok: res.ok, mode: "mysql", database: res.database, version: res.version },
+          { status: res.ok ? 200 : 503 },
+        );
+      }
+      await db().query("SELECT 1");
+      return NextResponse.json({ ok: true, mode: "postgres" });
+    }
     if (route === "setup")
       return NextResponse.json(
         isPost ? await setupAccount(await json()) : await setupStatus(),
@@ -80,10 +107,24 @@ async function handle(
       const u = await requireUser();
       const body = z.object({ name:z.string().trim().min(1).max(150), password:z.string().min(14).max(256).optional(), currentPassword:z.string().max(256).optional() }).strict().parse(await json());
       if (body.password) await changePassword({currentPassword:body.currentPassword, newPassword:body.password});
-      await transaction(async c => {
-        await c.query("UPDATE app_user SET name=$1 WHERE id=$2",[body.name,u.id]);
-        await audit(c,u.id,"account.profile_updated",u.id);
-      });
+      if (isMysqlMode()) {
+        const split = splitFullName(body.name);
+        await mysqlTransaction(async (conn) => {
+          await conn.execute(
+            "UPDATE users SET first_name = ?, last_name = ?, name = ? WHERE id = ?",
+            [split.firstName, split.lastName, body.name, u.id],
+          );
+          await conn.execute(
+            "INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, 'account.profile_updated', 'user', ?, '{}', ?)",
+            [randomUUID(), u.id, u.id, clientIp],
+          );
+        });
+      } else {
+        await transaction(async c => {
+          await c.query("UPDATE app_user SET name=$1 WHERE id=$2",[body.name,u.id]);
+          await audit(c,u.id,"account.profile_updated",u.id);
+        });
+      }
       return NextResponse.json({ok:true,name:body.name});
     }
     if (route === "clients/search" && !isPost) {
@@ -147,18 +188,98 @@ async function handle(
       isPost
     ) {
       const u = await requireUser("clients.write");
-      const id = z.uuid().parse(path[1]);
+      const id = z.string().uuid().parse(path[1]);
       const x = z
         .object({ body: z.string().trim().min(1).max(5000) })
         .parse(await json());
-      await transaction(async (c) => {
-        await c.query(
-          "INSERT INTO note(client_id,body,created_by) VALUES($1,$2,$3)",
-          [id, x.body, u.id],
-        );
-        await audit(c, u.id, "note.created", id);
-      });
+      if (isMysqlMode()) {
+        const noteId = randomUUID();
+        await mysqlTransaction(async (conn) => {
+          await conn.execute(
+            "INSERT INTO client_notes (id, client_id, body, created_by) VALUES (?, ?, ?, ?)",
+            [noteId, id, x.body, u.id],
+          );
+          await conn.execute(
+            "INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, 'note.created', 'client', ?, '{}', ?)",
+            [randomUUID(), u.id, id, clientIp],
+          );
+        });
+      } else {
+        await transaction(async (c) => {
+          await c.query(
+            "INSERT INTO note(client_id,body,created_by) VALUES($1,$2,$3)",
+            [id, x.body, u.id],
+          );
+          await audit(c, u.id, "note.created", id);
+        });
+      }
       return NextResponse.json({ ok: true }, { status: 201 });
+    }
+    if (
+      path[0] === "clients" &&
+      path[2] === "folders" &&
+      path.length === 3
+    ) {
+      if (isPost) {
+        const u = await requireUser("clients.write");
+        const body = await json(64000);
+        return NextResponse.json(
+          await createClientFolder({ ...body, clientId: path[1] }, u.id, clientIp),
+          { status: 201 },
+        );
+      }
+      await requireUser("clients.read");
+      return NextResponse.json(await listClientFolders(path[1]));
+    }
+    if (
+      path[0] === "clients" &&
+      path[2] === "documents" &&
+      path.length === 3
+    ) {
+      if (isPost) {
+        const u = await requireUser();
+        const canWrite =
+          u.permissions.includes("admin.full") ||
+          u.permissions.includes("documents.write") ||
+          u.permissions.includes("clients.write") ||
+          u.roles.includes("admin");
+        if (!canWrite) {
+          throw new HttpError(403, "Permission clients.write ou documents.write requise.", "FORBIDDEN");
+        }
+        const ctype = req.headers.get("content-type") || "";
+        let payload: unknown;
+        if (ctype.includes("multipart/form-data")) {
+          const form = await req.formData();
+          const file = form.get("file");
+          if (!(file instanceof File)) {
+            throw new HttpError(400, "Fichier manquant.", "MISSING_FILE");
+          }
+          const buf = Buffer.from(await file.arrayBuffer());
+          payload = {
+            clientId: path[1],
+            folderId: (form.get("folderId") as string | null) || null,
+            originalName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            isPrivate: form.get("isPrivate") !== "false",
+            contentBase64: buf.toString("base64"),
+          };
+        } else {
+          const body = await json(15 * 1024 * 1024);
+          payload = { ...body, clientId: path[1] };
+        }
+        return NextResponse.json(
+          await uploadDocument(payload, u, clientIp),
+          { status: 201 },
+        );
+      }
+      const u = await requireUser("clients.read");
+      const url = new URL(req.url);
+      return NextResponse.json(
+        await listDocuments(u, {
+          clientId: path[1],
+          folderId: url.searchParams.get("folderId") ?? undefined,
+        }),
+      );
     }
     if (
       path[0] === "services" &&
@@ -286,6 +407,77 @@ async function handle(
         await deleteDriveItem(body.id, u.id)
       );
     }
+    if (route === "documents") {
+      if (isPost) {
+        const u = await requireUser();
+        const canWrite =
+          u.permissions.includes("admin.full") ||
+          u.permissions.includes("documents.write") ||
+          u.permissions.includes("clients.write") ||
+          u.roles.includes("admin");
+        if (!canWrite) {
+          throw new HttpError(403, "Permission documents.write requise.", "FORBIDDEN");
+        }
+        const ctype = req.headers.get("content-type") || "";
+        let payload: unknown;
+        if (ctype.includes("multipart/form-data")) {
+          const form = await req.formData();
+          const file = form.get("file");
+          if (!(file instanceof File)) {
+            throw new HttpError(400, "Fichier manquant.", "MISSING_FILE");
+          }
+          const buf = Buffer.from(await file.arrayBuffer());
+          payload = {
+            clientId: (form.get("clientId") as string | null) || null,
+            folderId: (form.get("folderId") as string | null) || null,
+            originalName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            isPrivate: form.get("isPrivate") !== "false",
+            contentBase64: buf.toString("base64"),
+          };
+        } else {
+          payload = await json(15 * 1024 * 1024);
+        }
+        return NextResponse.json(await uploadDocument(payload, u, clientIp), { status: 201 });
+      }
+      const u = await requireUser();
+      const url = new URL(req.url);
+      return NextResponse.json(
+        await listDocuments(u, {
+          clientId: url.searchParams.get("clientId") ?? undefined,
+          folderId: url.searchParams.get("folderId") ?? undefined,
+        }),
+      );
+    }
+    if (
+      path[0] === "documents" &&
+      path[2] === "download" &&
+      path.length === 3 &&
+      !isPost
+    ) {
+      const u = await requireUser();
+      const { document, content } = await getAuthorizedDocument(path[1], u);
+      const safeDownloadName = document.original_name.replace(/["\r\n]/g, "_");
+      return new NextResponse(new Uint8Array(content), {
+        status: 200,
+        headers: {
+          "Content-Type": document.mime_type,
+          "Content-Length": String(content.byteLength),
+          "Content-Disposition": `attachment; filename="${safeDownloadName}"`,
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
+    if (
+      path[0] === "documents" &&
+      path[2] === "delete" &&
+      path.length === 3 &&
+      isPost
+    ) {
+      const u = await requireUser();
+      return NextResponse.json(await deleteDocument(path[1], u, clientIp));
+    }
     if (route === "admin/users" && !isPost) {
       return NextResponse.json(await listAdminUsers());
     }
@@ -310,12 +502,14 @@ async function handle(
       );
     if (e instanceof HttpError)
       return NextResponse.json({ error: e.message, code:e.code }, { status: e.status });
-    console.error("API failure", {type:e instanceof Error?e.name:"Unknown"});
+    console.error("API failure", {
+      type: e instanceof Error ? e.name : "Unknown",
+      message: redactSensitive(e instanceof Error ? e.message : ""),
+    });
     return NextResponse.json(
       {
         error:
-          "Service indisponible. Vérifiez la configuration et la connexion PostgreSQL.",
-
+          "Service indisponible. Vérifiez la configuration et la connexion à la base de données.",
       },
       { status: 503 },
     );

@@ -91,6 +91,7 @@ async function handle(
             database: res.database,
             version: res.version,
             ...(res.schemaIssues?.length ? { schemaIssues: res.schemaIssues } : {}),
+            ...(res.bootstrap ? { bootstrap: res.bootstrap } : {}),
             ...(res.ok ? {} : { error: res.error }),
           },
           { status: res.ok ? 200 : 503 },

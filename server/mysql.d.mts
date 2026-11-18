@@ -15,6 +15,7 @@ export function testMysqlConnection(): Promise<{
   database: string | null;
   version: string | null;
   schemaIssues?: { column: string; code: string }[];
+  bootstrap?: string | null;
   error?: string;
 }>;
 export function ensureMysqlSchema(): Promise<void>;

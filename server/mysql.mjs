@@ -110,47 +110,78 @@ export async function ensureMysqlSchema() {
 
 /**
  * Crée le premier administrateur à partir de BOOTSTRAP_EMAIL / BOOTSTRAP_NAME /
- * BOOTSTRAP_PASSWORD, uniquement si aucun administrateur actif n'existe. Aucun compte
- * existant n'est jamais modifié ni réinitialisé.
+ * BOOTSTRAP_PASSWORD, uniquement si aucun administrateur actif n'existe.
+ *
+ * Récupération : avec BOOTSTRAP_RESET=1 (configuration privée de l'hébergeur),
+ * le compte BOOTSTRAP_EMAIL est créé ou, s'il existe, reçoit ce mot de passe,
+ * le rôle admin et est réactivé ; ses sessions sont révoquées. Retirer
+ * BOOTSTRAP_RESET et BOOTSTRAP_PASSWORD ensuite.
+ *
+ * Le résultat (sans aucune donnée) est exposé dans /api/health -> bootstrap.
  */
 async function bootstrapMysqlAdmin() {
+  const set = (status) => {
+    state.bootstrap = status;
+    return status;
+  };
   const password = process.env.BOOTSTRAP_PASSWORD ?? "";
-  if (!password) return;
-  const email = normalizeEmail(
-    process.env.BOOTSTRAP_EMAIL ?? process.env.BOOTSTRAP_IDENTIFIER ?? "",
-  );
-  if (!isValidEmail(email) || password.length < 14 || password.length > 256) {
-    console.error(
-      "Compte initial ignoré : BOOTSTRAP_EMAIL valide et BOOTSTRAP_PASSWORD de 14 caractères minimum requis.",
-    );
-    return;
+  const rawEmail = process.env.BOOTSTRAP_EMAIL ?? process.env.BOOTSTRAP_IDENTIFIER ?? "";
+  if (!password && !rawEmail.trim()) return set("not_configured");
+  const email = normalizeEmail(rawEmail);
+  if (!isValidEmail(email)) {
+    console.error("Compte initial ignoré : BOOTSTRAP_EMAIL invalide.");
+    return set("invalid_email");
   }
-  const name = (process.env.BOOTSTRAP_NAME ?? "Administrateur GoPermis").trim();
+  if (password.length < 14 || password.length > 256) {
+    console.error("Compte initial ignoré : BOOTSTRAP_PASSWORD de 14 à 256 caractères requis.");
+    return set("invalid_password");
+  }
+  const reset = (process.env.BOOTSTRAP_RESET ?? "").trim() === "1";
+  const name = (process.env.BOOTSTRAP_NAME ?? "Administrateur GoPermis").trim() || "Administrateur GoPermis";
   const pool = state.pool;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    // Création uniquement si aucun administrateur actif n'existe (base vide ou
-    // table héritée d'une ancienne version sans rôle admin). Aucun compte
-    // existant n'est modifié.
-    const [admins] = await conn.query(
-      "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1 FOR UPDATE",
-    );
-    if (Array.isArray(admins) && admins.length > 0) {
-      await conn.rollback();
-      return;
-    }
     const [taken] = await conn.execute(
-      "SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1",
+      "SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1 FOR UPDATE",
       [email],
     );
-    if (Array.isArray(taken) && taken.length > 0) {
-      await conn.rollback();
-      console.error(
-        "Compte initial ignoré : BOOTSTRAP_EMAIL est déjà utilisé par un compte existant non administrateur. Choisissez une autre adresse.",
+    const existingId = Array.isArray(taken) && taken.length ? String(taken[0].id) : null;
+
+    if (reset && existingId) {
+      await conn.execute(
+        `UPDATE users SET password_hash = ?, role = 'admin', role_preset = 'admin', is_active = 1
+         WHERE id = ?`,
+        [hashPassword(password), existingId],
       );
-      return;
+      await conn.execute(
+        "INSERT IGNORE INTO user_permissions (id, user_id, permission_name) VALUES (?, ?, 'admin.full')",
+        [randomUUID(), existingId],
+      );
+      await conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", [existingId]);
+      await conn.execute("DELETE FROM login_attempts");
+      await conn.commit();
+      console.log("MySQL : compte BOOTSTRAP_EMAIL réinitialisé (BOOTSTRAP_RESET=1).");
+      return set("reset");
     }
+
+    if (!reset) {
+      const [admins] = await conn.query(
+        "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1",
+      );
+      if (Array.isArray(admins) && admins.length > 0) {
+        await conn.rollback();
+        return set(existingId ? "already_exists" : "skipped_admin_exists");
+      }
+      if (existingId) {
+        await conn.rollback();
+        console.error(
+          "Compte initial ignoré : BOOTSTRAP_EMAIL est déjà utilisé par un compte non administrateur. Utilisez BOOTSTRAP_RESET=1 pour le récupérer.",
+        );
+        return set("skipped_email_taken");
+      }
+    }
+
     const id = randomUUID();
     const { firstName, lastName } = splitFullName(name);
     await conn.execute(
@@ -164,8 +195,10 @@ async function bootstrapMysqlAdmin() {
     );
     await conn.commit();
     console.log("MySQL : compte administrateur initial créé.");
+    return set("created");
   } catch (err) {
     await conn.rollback().catch(() => {});
+    set("error");
     throw err;
   } finally {
     conn.release();
@@ -210,6 +243,7 @@ export async function testMysqlConnection() {
     return {
       ok: Boolean(row && Number(row.ok) === 1),
       schemaIssues: state.schemaIssues ?? [],
+      bootstrap: state.bootstrap ?? null,
       database: row?.database_name ? String(row.database_name) : null,
       version: row?.server_version ? String(row.server_version) : null,
     };

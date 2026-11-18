@@ -548,18 +548,18 @@ export function DriveView() {
   const files = items.filter((it) => it.type === "file");
 
   const c = {
-    surface: isDark ? "#0b101b" : "#ffffff",
-    cardBg: isDark ? "#111827" : "#f8fafc",
-    subtleBg: isDark ? "#1e293b" : "#f1f5f9",
-    inputBg: isDark ? "#131d31" : "#f8fafc",
-    border: isDark ? "#1e293b" : "#e2e8f0",
-    borderInput: isDark ? "#334155" : "#e2e8f0",
-    textHeading: isDark ? "#f8fafc" : "#0f172a",
-    textBody: isDark ? "#cbd5e1" : "#334155",
-    textMuted: isDark ? "#94a3b8" : "#64748b",
-    hoverBg: isDark ? "#1e293b" : "#f1f5f9",
+    surface: isDark ? "#0b101b" : "transparent",
+    cardBg: isDark ? "#111827" : "rgba(255, 255, 255, 0.42)",
+    subtleBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.5)",
+    inputBg: isDark ? "#131d31" : "rgba(255, 255, 255, 0.6)",
+    border: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.8)",
+    borderInput: isDark ? "#334155" : "rgba(255, 255, 255, 0.9)",
+    textHeading: isDark ? "#f8fafc" : "var(--ink)",
+    textBody: isDark ? "#cbd5e1" : "var(--ink-2)",
+    textMuted: isDark ? "#94a3b8" : "var(--ink-3)",
+    hoverBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
     activeTreeBg: isDark ? "#1e293b" : "var(--acc-soft)",
-    branchLine: isDark ? "#334155" : "#cbd5e1",
+    branchLine: isDark ? "#334155" : "rgba(120, 60, 45, 0.18)",
   };
 
   // Build recursive tree structure with branch connecting lines (Image 2 style)
@@ -766,7 +766,7 @@ export function DriveView() {
           boxShadow: isDark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
         }}
       >
-        {/* Left Header: Knowledge Base + Add action */}
+        {/* En-tête : Documents + ajout */}
         <div
           style={{
             display: "flex",
@@ -779,7 +779,7 @@ export function DriveView() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <HardDrive size={16} style={{ color: isDark ? "#cbd5e1" : "#0f172a" }} />
             <strong style={{ fontSize: "14px", fontWeight: 700, color: c.textHeading }}>
-              Knowledge Base
+              Documents
             </strong>
           </div>
 
@@ -817,7 +817,7 @@ export function DriveView() {
           />
           <input
             type="search"
-            placeholder="Search..."
+            placeholder="Rechercher un dossier…"
             value={treeSearch}
             onChange={(e) => setTreeSearch(e.target.value)}
             style={{
@@ -835,7 +835,7 @@ export function DriveView() {
           />
         </div>
 
-        {/* Tabs: Folders / Tags (Segmented button matching Image 2) */}
+        {/* Onglets : Dossiers / Favoris (Segmented button matching Image 2) */}
         <div
           style={{
             display: "flex",
@@ -865,7 +865,7 @@ export function DriveView() {
               cursor: "pointer",
             }}
           >
-            Folders
+            Dossiers
           </button>
           <button
             type="button"
@@ -891,7 +891,7 @@ export function DriveView() {
             }}
           >
             <Star size={11} fill={treeTab === "starred" ? "var(--acc)" : "none"} style={{ color: "var(--acc)" }} />
-            Tags
+            Favoris
           </button>
         </div>
 
@@ -933,7 +933,7 @@ export function DriveView() {
             ) : (
               <Home size={15} style={{ color: isDark ? "#94a3b8" : "#64748b" }} />
             )}
-            <span style={{ flex: 1 }}>General Knowledge</span>
+            <span style={{ flex: 1 }}>Tous les documents</span>
             <span
               style={{
                 fontSize: "10.5px",
@@ -1048,7 +1048,7 @@ export function DriveView() {
                 gap: "6px",
               }}
             >
-              <span>{currentFolder ? currentFolder.name : "General Knowledge"}</span>
+              <span>{currentFolder ? currentFolder.name : "Tous les documents"}</span>
               <ChevronDown size={16} style={{ color: c.textMuted }} />
             </button>
 
@@ -1258,7 +1258,7 @@ export function DriveView() {
                 textAlign: "center",
                 border: `2px dashed ${isDark ? "#334155" : "#e2e8f0"}`,
                 borderRadius: "14px",
-                background: isDark ? "#111827" : "#fafafa",
+                background: isDark ? "#111827" : "rgba(255, 255, 255, 0.35)",
                 marginTop: "10px",
               }}
             >
@@ -1330,7 +1330,7 @@ export function DriveView() {
                       letterSpacing: "-0.01em",
                     }}
                   >
-                    Folders
+                    Dossiers
                   </h3>
 
                   <div

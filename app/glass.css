@@ -1017,3 +1017,52 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 .pwRules li.ok svg { opacity: 1; }
 .forcePwCard .btnPrimary { height: 46px; justify-content: center; font-size: 14px; }
 .forcePwCard .linkButton { justify-self: center; display: inline-flex; gap: 6px; align-items: center; background: none; border: 0; color: var(--ink-3); cursor: pointer; font-weight: 600; }
+
+/* ==========================================================================
+   Drive & Données : boutons arrondis, verre
+   ========================================================================== */
+:root:not([data-theme="dark"]) :is(.driveMainArea, .driveSidebar) :is(button, select, input:not([type="checkbox"])) {
+  border-radius: 999px !important;
+}
+:root:not([data-theme="dark"]) :is(.driveMainArea, .driveSidebar) button:not(:disabled):hover { transform: translateY(-1px); }
+:root:not([data-theme="dark"]) :is(.driveMainArea, .driveSidebar) button { transition: transform 0.3s var(--ease-out), background 0.2s, box-shadow 0.3s; }
+:root:not([data-theme="dark"]) .driveMainArea {
+  background: linear-gradient(155deg, var(--glass-1), var(--glass-2)) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: var(--radius-xl) !important;
+}
+:root:not([data-theme="dark"]) .driveSidebar { border-radius: var(--radius-xl) !important; }
+:root:not([data-theme="dark"]) .donneesTabGroup {
+  background: rgba(255, 255, 255, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  border-radius: 999px !important;
+  padding: 4px !important;
+  backdrop-filter: blur(14px);
+}
+:root:not([data-theme="dark"]) .donneesTabGroup button { border-radius: 999px !important; }
+:root:not([data-theme="dark"]) :is(.resourceCompactItem, .unavailItem) {
+  background: rgba(255, 255, 255, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  border-radius: 16px !important;
+}
+:root:not([data-theme="dark"]) :is(.unavailForm, .resourcesWorkspace .card) { background: rgba(255, 255, 255, 0.3) !important; border-radius: 18px !important; }
+:root:not([data-theme="dark"]) :is(.btnSecondary, .btnPrimary, .btnSmallGray, .btnDanger, .btnAdminPanel) { border-radius: 999px !important; }
+:root:not([data-theme="dark"]) .btnIconTiny { border-radius: 999px !important; }
+:root:not([data-theme="dark"]) :is(.resourcesWorkspace, .donneesWorkspaceInner, .pricingWorkspace) { background: transparent !important; }
+:root:not([data-theme="dark"]) .segmentBtn {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  color: var(--ink-2) !important;
+  border-radius: 999px !important;
+}
+:root:not([data-theme="dark"]) .segmentBtn.active {
+  background: linear-gradient(150deg, var(--acc-2), var(--acc)) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px -8px color-mix(in oklab, var(--acc) 80%, transparent) !important;
+}
+:root:not([data-theme="dark"]) .segmentBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+main.driveMainArea { margin-left: 0 !important; width: auto !important; }

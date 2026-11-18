@@ -6,7 +6,11 @@ export function splitFullName(name: unknown): { firstName: string; lastName: str
 export function redactSensitive(input: unknown): string;
 export function hashPassword(password: string): string;
 export function verifyPassword(password: string, encoded: unknown): boolean;
-export function accountInput(): { identifier: string; password: string; name: string };
+export function accountInput(env?: Record<string, string | undefined>): {
+  identifier: string;
+  password: string;
+  name: string;
+};
 export function createAccount(
   client: PoolClient,
   input: { identifier: string; password: string; name: string },

@@ -10,6 +10,26 @@ Si un compte existe déjà dans la base sélectionnée, le formulaire de créati
 
 Les anciennes versions ajoutaient un compte et un mot de passe dans le code et réécrivaient les accès au démarrage. Ce comportement est supprimé. Tout mot de passe qui a déjà été affiché ou commité doit être remplacé avant un usage réel ; ne pas l'intégrer à nouveau au code, au chat ou aux captures.
 
+## Hostinger : origine autorisée et premier administrateur MySQL
+
+Dans la configuration privée de l'application Node.js, définir :
+
+```dotenv
+APP_ORIGIN=https://awake-darkslateblue-rabbit-60.hostingersite.com
+DATABASE_MODE=mysql
+BOOTSTRAP_IDENTIFIER=admin
+BOOTSTRAP_NAME=Administrateur GoPermis
+BOOTSTRAP_ROLE=admin
+```
+
+Renseigner également `BOOTSTRAP_PASSWORD` dans la configuration privée, avec un secret personnel de 14 caractères minimum. Ne pas le saisir dans Git, le chat ou une commande historisée. Les paramètres `DB_*` existants doivent désigner la base MySQL de cette application.
+
+Après application des migrations et depuis le dossier du projet sur le serveur, exécuter `npm run user:create:mysql` avec cet environnement privé chargé. Si ces variables sont dans `.env.local`, utiliser `node --env-file=.env.local scripts/create-user-mysql.mjs`. Le script accepte l'identifiant `admin` sans exiger un e-mail, comme le formulaire de connexion. L'ancien `BOOTSTRAP_EMAIL` reste utilisable ; `BOOTSTRAP_IDENTIFIER` est prioritaire. Le compte et ses permissions sont créés dans une transaction et un compte existant n'est jamais écrasé. La colonne historique `users.email` conserve l'identifiant ; les formulaires de création des autres collaborateurs continuent de valider les e-mails.
+
+Redémarrer ou redéployer l'application après modification de `APP_ORIGIN`, puis se connecter au CRM avec l'identifiant choisi. La création publique reste désactivée. Les variables de bootstrap MySQL ne créent pas automatiquement un utilisateur au démarrage : le script doit être exécuté. Retirer `BOOTSTRAP_PASSWORD` de la configuration après la création.
+
+L'erreur « Origine refusée » survient avant la vérification du compte et du mot de passe. Vérifier d'abord `APP_ORIGIN` dans l'environnement réellement utilisé par le processus Hostinger. Un domaine différent, une valeur absente derrière le proxy ou une ancienne adresse nécessitent une correction de cette configuration. Le code accepte désormais les variantes équivalentes d'une origine configurée (slash final, casse du nom d'hôte, port HTTPS 443, espaces autour), sans autoriser un autre domaine ni faire confiance aux en-têtes de proxy envoyés par un client.
+
 ## Persistance de l'aperçu
 
 Les données de prévisualisation sont stockées dans `.data/preview`, ou dans `PGLITE_DATA_DIR` si ce chemin est renseigné. Une base en mémoire n'est plus créée à chaque redémarrage. Compte, sessions et dossiers survivent tant que ce répertoire est conservé. Le répertoire `.data` est exclu de Git et des images Docker. Les fragments de base précédemment suivis dans Git sont retirés du suivi **sans suppression des fichiers locaux**.

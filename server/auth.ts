@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { db } from "./db";
 import { isMysqlMode, mysqlQuery } from "./mysql.mjs";
 import { HttpError } from "./errors.mjs";
+import { productionOriginAllowed } from "./request-origin.mjs";
 
 export { HttpError };
 
@@ -195,8 +196,7 @@ export function checkOrigin(request: Request) {
       "ORIGIN_REJECTED",
     );
   if (!previewMode()) {
-    const expected = process.env.APP_ORIGIN || new URL(request.url).origin;
-    if (origin === expected) return;
+    if (productionOriginAllowed(request, process.env.APP_ORIGIN)) return;
   } else {
     const url = new URL(request.url);
     const host =

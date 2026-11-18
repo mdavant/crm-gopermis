@@ -90,6 +90,7 @@ async function handle(
             mode: "mysql",
             database: res.database,
             version: res.version,
+            ...(res.schemaIssues?.length ? { schemaIssues: res.schemaIssues } : {}),
             ...(res.ok ? {} : { error: res.error }),
           },
           { status: res.ok ? 200 : 503 },
@@ -516,10 +517,18 @@ async function handle(
       {
         error:
           "Service indisponible. Vérifiez la configuration et la connexion à la base de données.",
+        ...(dbErrorCode(e) ? { code: dbErrorCode(e) } : {}),
       },
       { status: 503 },
     );
   }
+}
+/** Code d'erreur MySQL générique (ex. ER_BAD_FIELD_ERROR), sans message ni donnée. */
+function dbErrorCode(e: unknown) {
+  const code = (e as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^(ER_[A-Z0-9_]+|ECONNREFUSED|ETIMEDOUT|PROTOCOL_[A-Z_]+)$/.test(code)
+    ? code
+    : undefined;
 }
 export const GET = handle;
 export const POST = handle;

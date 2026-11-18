@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getMysqlPool } from "../server/mysql.mjs";
+import { repairMysqlSchema } from "./mysql-schema-repair.mjs";
 
 /**
  * Découpe un fichier SQL en instructions individuelles en ignorant les
@@ -122,6 +123,7 @@ export async function migrateMysql() {
   const pool = await getMysqlPool();
   const conn = await pool.getConnection();
   const appliedNow = [];
+  let repair = { added: [], failed: [] };
   try {
     const [lockRows] = await conn.query(
       "SELECT GET_LOCK('gopermis_crm_migrations', 30) AS acquired",
@@ -160,11 +162,20 @@ export async function migrateMysql() {
         );
         appliedNow.push(name);
       }
+
+      // Tables héritées d'une ancienne version : ajoute les colonnes manquantes.
+      const allStatements = [];
+      for (const name of files) {
+        allStatements.push(
+          ...splitSqlStatements(await readFile(join(migrationsDir(), name), "utf8")),
+        );
+      }
+      repair = await repairMysqlSchema(conn, allStatements);
     } finally {
       await conn.query("SELECT RELEASE_LOCK('gopermis_crm_migrations')").catch(() => {});
     }
   } finally {
     conn.release();
   }
-  return { applied: appliedNow };
+  return { applied: appliedNow, repaired: repair.added, repairFailed: repair.failed };
 }

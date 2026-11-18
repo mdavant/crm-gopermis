@@ -95,6 +95,11 @@ export async function ensureMysqlSchema() {
     const result = await migrateMysql();
     if (result.applied.length)
       console.log(`MySQL : migrations appliquées -> ${result.applied.join(", ")}`);
+    if (result.repaired?.length)
+      console.log(`MySQL : colonnes ajoutées -> ${result.repaired.join(", ")}`);
+    if (result.repairFailed?.length)
+      console.error("MySQL : colonnes impossibles à ajouter", result.repairFailed);
+    state.schemaIssues = result.repairFailed ?? [];
     await bootstrapMysqlAdmin();
   })().catch((err) => {
     state.migrated = undefined;
@@ -105,7 +110,7 @@ export async function ensureMysqlSchema() {
 
 /**
  * Crée le premier administrateur à partir de BOOTSTRAP_EMAIL / BOOTSTRAP_NAME /
- * BOOTSTRAP_PASSWORD, uniquement si la table users est vide. Aucun compte
+ * BOOTSTRAP_PASSWORD, uniquement si aucun administrateur actif n'existe. Aucun compte
  * existant n'est jamais modifié ni réinitialisé.
  */
 async function bootstrapMysqlAdmin() {
@@ -125,9 +130,25 @@ async function bootstrapMysqlAdmin() {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query("SELECT id FROM users LIMIT 1 FOR UPDATE");
-    if (Array.isArray(rows) && rows.length > 0) {
+    // Création uniquement si aucun administrateur actif n'existe (base vide ou
+    // table héritée d'une ancienne version sans rôle admin). Aucun compte
+    // existant n'est modifié.
+    const [admins] = await conn.query(
+      "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 LIMIT 1 FOR UPDATE",
+    );
+    if (Array.isArray(admins) && admins.length > 0) {
       await conn.rollback();
+      return;
+    }
+    const [taken] = await conn.execute(
+      "SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1",
+      [email],
+    );
+    if (Array.isArray(taken) && taken.length > 0) {
+      await conn.rollback();
+      console.error(
+        "Compte initial ignoré : BOOTSTRAP_EMAIL est déjà utilisé par un compte existant non administrateur. Choisissez une autre adresse.",
+      );
       return;
     }
     const id = randomUUID();
@@ -188,6 +209,7 @@ export async function testMysqlConnection() {
     const row = Array.isArray(rows) ? rows[0] : null;
     return {
       ok: Boolean(row && Number(row.ok) === 1),
+      schemaIssues: state.schemaIssues ?? [],
       database: row?.database_name ? String(row.database_name) : null,
       version: row?.server_version ? String(row.server_version) : null,
     };

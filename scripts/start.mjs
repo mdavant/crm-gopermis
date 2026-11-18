@@ -30,6 +30,14 @@ if (await exists(standaloneServer)) {
   if (await exists(publicSrc)) {
     await cp(publicSrc, publicDest, { recursive: true, force: true });
   }
+  // Les migrations SQL sont lues au démarrage (création automatique des tables).
+  const dbSrc = resolve(process.cwd(), "db");
+  if (await exists(dbSrc)) {
+    await cp(dbSrc, resolve(process.cwd(), ".next/standalone/db"), {
+      recursive: true,
+      force: true,
+    });
+  }
   args = [standaloneServer];
 } else {
   args = ["node_modules/next/dist/bin/next", "start", "--hostname", hostname, "--port", port];

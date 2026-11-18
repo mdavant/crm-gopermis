@@ -1,5 +1,12 @@
 import mysql from "mysql2/promise";
-import { redactSensitive } from "./accounts.mjs";
+import { randomUUID } from "node:crypto";
+import {
+  hashPassword,
+  isValidEmail,
+  normalizeEmail,
+  redactSensitive,
+  splitFullName,
+} from "./accounts.mjs";
 
 const key = Symbol.for("gopermis.mysql");
 const state = globalThis[key] ?? (globalThis[key] = {});
@@ -74,14 +81,90 @@ export async function getMysqlPool() {
   return state.pending;
 }
 
-export async function mysqlQuery(sql, params = []) {
+/**
+ * Applique automatiquement les migrations MySQL (idempotentes) une seule fois
+ * par processus. Sur Hostinger, aucune commande manuelle n'est donc requise :
+ * les tables sont créées au premier appel. Désactivable via MYSQL_AUTO_MIGRATE=0.
+ */
+export async function ensureMysqlSchema() {
+  if ((process.env.MYSQL_AUTO_MIGRATE ?? "1").trim() === "0") return;
+  if (state.migrated) return state.migrated;
+  state.migrated = (async () => {
+    await getMysqlPool();
+    const { migrateMysql } = await import("../scripts/migrations-mysql.mjs");
+    const result = await migrateMysql();
+    if (result.applied.length)
+      console.log(`MySQL : migrations appliquées -> ${result.applied.join(", ")}`);
+    await bootstrapMysqlAdmin();
+  })().catch((err) => {
+    state.migrated = undefined;
+    throw err;
+  });
+  return state.migrated;
+}
+
+/**
+ * Crée le premier administrateur à partir de BOOTSTRAP_EMAIL / BOOTSTRAP_NAME /
+ * BOOTSTRAP_PASSWORD, uniquement si la table users est vide. Aucun compte
+ * existant n'est jamais modifié ni réinitialisé.
+ */
+async function bootstrapMysqlAdmin() {
+  const password = process.env.BOOTSTRAP_PASSWORD ?? "";
+  if (!password) return;
+  const email = normalizeEmail(
+    process.env.BOOTSTRAP_EMAIL ?? process.env.BOOTSTRAP_IDENTIFIER ?? "",
+  );
+  if (!isValidEmail(email) || password.length < 14 || password.length > 256) {
+    console.error(
+      "Compte initial ignoré : BOOTSTRAP_EMAIL valide et BOOTSTRAP_PASSWORD de 14 caractères minimum requis.",
+    );
+    return;
+  }
+  const name = (process.env.BOOTSTRAP_NAME ?? "Administrateur GoPermis").trim();
+  const pool = state.pool;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query("SELECT id FROM users LIMIT 1 FOR UPDATE");
+    if (Array.isArray(rows) && rows.length > 0) {
+      await conn.rollback();
+      return;
+    }
+    const id = randomUUID();
+    const { firstName, lastName } = splitFullName(name);
+    await conn.execute(
+      `INSERT INTO users (id, first_name, last_name, name, email, password_hash, role, role_preset, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, 'admin', 'admin', 1)`,
+      [id, firstName, lastName, name, email, hashPassword(password)],
+    );
+    await conn.execute(
+      "INSERT IGNORE INTO user_permissions (id, user_id, permission_name) VALUES (?, ?, 'admin.full')",
+      [randomUUID(), id],
+    );
+    await conn.commit();
+    console.log("MySQL : compte administrateur initial créé.");
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function readyPool() {
   const pool = await getMysqlPool();
+  await ensureMysqlSchema();
+  return pool;
+}
+
+export async function mysqlQuery(sql, params = []) {
+  const pool = await readyPool();
   const [rows] = await pool.execute(sql, params);
   return rows;
 }
 
 export async function mysqlTransaction(fn) {
-  const pool = await getMysqlPool();
+  const pool = await readyPool();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -98,7 +181,7 @@ export async function mysqlTransaction(fn) {
 
 export async function testMysqlConnection() {
   try {
-    const pool = await getMysqlPool();
+    const pool = await readyPool();
     const [rows] = await pool.execute(
       "SELECT 1 AS ok, DATABASE() AS database_name, VERSION() AS server_version",
     );
@@ -127,6 +210,7 @@ export async function closeMysqlPool() {
     } finally {
       state.pool = undefined;
       state.pending = undefined;
+      state.migrated = undefined;
       delete globalThis[key];
     }
   }

@@ -42,7 +42,7 @@ export function DonneesView({
               color: isDark ? "#f8fafc" : "#0f172a",
             }}
           >
-            <Database size={26} style={{ color: "#2563eb" }} />
+            <Database size={26} style={{ color: "var(--acc)" }} />
             <span>Données GoPermis</span>
           </h1>
           <p style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: "13.5px", margin: 0 }}>
@@ -81,7 +81,7 @@ export function DonneesView({
               transition: "all 0.15s ease",
             }}
           >
-            <WalletCards size={16} style={{ color: activeTab === "tarifs" ? "#2563eb" : "inherit" }} />
+            <WalletCards size={16} style={{ color: activeTab === "tarifs" ? "var(--acc)" : "inherit" }} />
             <span>Tarifs & offres</span>
           </button>
 
@@ -104,7 +104,7 @@ export function DonneesView({
               transition: "all 0.15s ease",
             }}
           >
-            <Car size={16} style={{ color: activeTab === "ressources" ? "#2563eb" : "inherit" }} />
+            <Car size={16} style={{ color: activeTab === "ressources" ? "var(--acc)" : "inherit" }} />
             <span>Véhicules & moniteurs</span>
           </button>
         </div>

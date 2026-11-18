@@ -294,7 +294,7 @@ export function NewBookingModal({
                   className="primary"
                   disabled={busy || compatibleVehicles.length === 0}
                   style={{
-                    background: "#2563eb",
+                    background: "var(--acc)",
                     color: "#ffffff",
                     boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
                   }}

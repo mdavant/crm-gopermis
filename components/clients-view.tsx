@@ -75,7 +75,7 @@ export function ClientsView({
             className="btnPrimary"
             onClick={onNewClient}
             style={{
-              background: "#2563eb",
+              background: "var(--acc)",
               color: "#ffffff",
               boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
             }}
@@ -96,7 +96,7 @@ export function ClientsView({
       {/* Filter and Search Bar */}
       <div className="clientsToolbar">
         <div className="searchBarContainer" style={{ borderColor: "#cbd5e1" }}>
-          <Search size={16} className="searchIcon" style={{ color: "#2563eb" }} />
+          <Search size={16} className="searchIcon" style={{ color: "var(--acc)" }} />
           <input
             type="text"
             placeholder="Rechercher par nom, prénom, téléphone ou email…"
@@ -110,7 +110,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "all" ? "active" : ""}`}
-            style={filter === "all" ? { background: "#2563eb", color: "#ffffff" } : {}}
+            style={filter === "all" ? { background: "var(--acc)", color: "#ffffff" } : {}}
             onClick={() => setFilter("all")}
           >
             Tous ({clients.length})
@@ -118,7 +118,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "active" ? "active" : ""}`}
-            style={filter === "active" ? { background: "#2563eb", color: "#ffffff" } : {}}
+            style={filter === "active" ? { background: "var(--acc)", color: "#ffffff" } : {}}
             onClick={() => setFilter("active")}
           >
             Actifs ({clients.filter((c) => c.status !== "Archivé").length})
@@ -126,7 +126,7 @@ export function ClientsView({
           <button
             type="button"
             className={`clientTabBtn ${filter === "archived" ? "active" : ""}`}
-            style={filter === "archived" ? { background: "#2563eb", color: "#ffffff" } : {}}
+            style={filter === "archived" ? { background: "var(--acc)", color: "#ffffff" } : {}}
             onClick={() => setFilter("archived")}
           >
             Archivés ({clients.filter((c) => c.status === "Archivé").length})
@@ -181,10 +181,10 @@ export function ClientsView({
                         <div
                           className="clientAvatarCell"
                           style={{
-                            background: "#eff6ff",
-                            color: "#2563eb",
+                            background: "var(--acc-soft)",
+                            color: "var(--acc)",
                             fontWeight: 800,
-                            border: "1px solid #dbeafe",
+                            border: "1px solid var(--acc-line)",
                           }}
                         >
                           {c.first_name[0]}
@@ -202,11 +202,11 @@ export function ClientsView({
                     <td>
                       <div className="contactMeta">
                         <span className="contactRow">
-                          <Phone size={13} style={{ color: "#2563eb" }} /> {c.phone}
+                          <Phone size={13} style={{ color: "var(--acc)" }} /> {c.phone}
                         </span>
                         {c.email && (
                           <span className="contactRow subEmail">
-                            <Mail size={13} style={{ color: "#2563eb" }} /> {c.email}
+                            <Mail size={13} style={{ color: "var(--acc)" }} /> {c.email}
                           </span>
                         )}
                       </div>
@@ -237,7 +237,7 @@ export function ClientsView({
                             <Trash2 size={14} />
                           </button>
                         )}
-                        <span className="openFileBtn" style={{ color: "#2563eb", fontWeight: 700 }}>
+                        <span className="openFileBtn" style={{ color: "var(--acc)", fontWeight: 700 }}>
                           Ouvrir <ChevronRight size={14} />
                         </span>
                       </div>

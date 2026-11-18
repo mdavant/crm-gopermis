@@ -75,7 +75,7 @@ export function ClientDetail({
   }
   return (
     <>
-      <button className="backBtn" onClick={back} style={{ color: "#2563eb", fontWeight: 700 }}>
+      <button className="backBtn" onClick={back} style={{ color: "var(--acc)", fontWeight: 700 }}>
         <ArrowLeft size={17} /> Retour aux clients
       </button>
       {savedMessage && (
@@ -84,12 +84,12 @@ export function ClientDetail({
         </p>
       )}
       <div className="clientHero">
-        <div className="bigAvatar" style={{ background: "#eff6ff", color: "#2563eb", border: "2px solid #dbeafe" }}>
+        <div className="bigAvatar" style={{ background: "var(--acc-soft)", color: "var(--acc)", border: "2px solid var(--acc-line)" }}>
           {d.client.first_name[0]}
           {d.client.last_name[0]}
         </div>
         <div>
-          <p className="eyebrow" style={{ color: "#2563eb", fontWeight: 700 }}>FICHE ÉLÈVE</p>
+          <p className="eyebrow" style={{ color: "var(--acc)", fontWeight: 700 }}>FICHE ÉLÈVE</p>
           <h1>
             {d.client.first_name} {d.client.last_name}
           </h1>
@@ -102,7 +102,7 @@ export function ClientDetail({
             className="primary"
             onClick={() => setAdding(true)}
             style={{
-              background: "#2563eb",
+              background: "var(--acc)",
               color: "#ffffff",
               boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
             }}

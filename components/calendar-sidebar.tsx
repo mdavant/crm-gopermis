@@ -85,7 +85,7 @@ export function CalendarSidebar({
     return cells;
   }, [viewMonth]);
 
-  const monthLabel = viewMonth.toLocaleString("en-US", { month: "long" });
+  const monthLabel = (() => { const m = viewMonth.toLocaleString("fr-FR", { month: "long" }); return m.charAt(0).toUpperCase() + m.slice(1); })();
 
   const filterOptions = [
     {id:"confirmed",label:"Séances confirmées"},
@@ -131,15 +131,15 @@ export function CalendarSidebar({
           </button>
         </div>
 
-        {/* Days of week header: Mo Tu We Th Fr Sa Su */}
+        {/* Jours de la semaine : L M M J V S D */}
         <div className="miniWeekHeader">
-          <span>Mo</span>
-          <span>Tu</span>
-          <span>We</span>
-          <span>Th</span>
-          <span>Fr</span>
-          <span>Sa</span>
-          <span>Su</span>
+          <span>L</span>
+          <span>M</span>
+          <span>M</span>
+          <span>J</span>
+          <span>V</span>
+          <span>S</span>
+          <span>D</span>
         </div>
 
         {/* 7x5 Day Grid */}

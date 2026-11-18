@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { Shield, KeyRound, CheckCircle2, AlertCircle, LogOut } from "lucide-react";
 import { api, type User } from "../lib/api-types";
+import { AccentPicker } from "./command-palette";
 
 interface ProfileViewProps {
   user: User;
@@ -157,6 +158,14 @@ export function ProfileView({ user, onUserUpdate, onLogout }: ProfileViewProps) 
               <span className="badgeNeutral">Selon les permissions attribuées</span>
             </div>
           </div>
+
+          <div className="dividerSoft" />
+
+          <h3 className="sectionSubHeading">Apparence</h3>
+          <p className="infoLabel" style={{ margin: "-4px 0 12px" }}>
+            Couleur d&apos;accent de l&apos;interface. Recherche rapide : Ctrl K (Windows) ou ⌘K (Mac).
+          </p>
+          <AccentPicker />
 
           <div className="dividerSoft" />
 

@@ -284,15 +284,15 @@ export function AdminPanel({ currentUser, onBackToDashboard }: AdminPanelProps) 
   };
 
   const c = {
-    surface: isDark ? "#0b101b" : "#ffffff",
-    cardBg: isDark ? "#111827" : "#ffffff",
-    subtleBg: isDark ? "#1e293b" : "#f8fafc",
-    border: isDark ? "#1e293b" : "#e2e8f0",
-    textHeading: isDark ? "#f8fafc" : "#0f172a",
-    textBody: isDark ? "#cbd5e1" : "#334155",
-    textMuted: isDark ? "#94a3b8" : "#64748b",
-    blueBrand: "#2563eb",
-    blueSoft: isDark ? "rgba(37, 99, 235, 0.2)" : "#eff6ff",
+    surface: isDark ? "#0b101b" : "transparent",
+    cardBg: isDark ? "#111827" : "rgba(255, 255, 255, 0.5)",
+    subtleBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.38)",
+    border: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.75)",
+    textHeading: isDark ? "#f8fafc" : "var(--ink)",
+    textBody: isDark ? "#cbd5e1" : "var(--ink-2)",
+    textMuted: isDark ? "#94a3b8" : "var(--ink-3)",
+    blueBrand: "var(--acc)",
+    blueSoft: isDark ? "color-mix(in oklab, var(--acc) 20%, transparent)" : "var(--acc-soft)",
   };
 
   return (

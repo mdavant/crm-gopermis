@@ -264,7 +264,7 @@ function BigFolderGraphic({
               width: "17px",
               height: "17px",
               borderRadius: "50%",
-              background: "#2563eb",
+              background: "var(--acc)",
               display: "grid",
               placeItems: "center",
               color: "#ffffff",
@@ -558,7 +558,7 @@ export function DriveView() {
     textBody: isDark ? "#cbd5e1" : "#334155",
     textMuted: isDark ? "#94a3b8" : "#64748b",
     hoverBg: isDark ? "#1e293b" : "#f1f5f9",
-    activeTreeBg: isDark ? "#1e293b" : "#eff6ff",
+    activeTreeBg: isDark ? "#1e293b" : "var(--acc-soft)",
     branchLine: isDark ? "#334155" : "#cbd5e1",
   };
 
@@ -618,7 +618,7 @@ export function DriveView() {
               borderRadius: "8px",
               border: "none",
               background: isSelected ? c.activeTreeBg : "transparent",
-              color: isSelected ? (isDark ? "#ffffff" : "#2563eb") : c.textBody,
+              color: isSelected ? (isDark ? "#ffffff" : "var(--acc)") : c.textBody,
               fontSize: "12.5px",
               fontWeight: isSelected ? 700 : 500,
               display: "flex",
@@ -641,7 +641,7 @@ export function DriveView() {
               <FolderOpen
                 size={15}
                 style={{
-                  color: isDark ? "#ffffff" : "#2563eb",
+                  color: isDark ? "#ffffff" : "var(--acc)",
                   flexShrink: 0,
                 }}
               />
@@ -671,9 +671,9 @@ export function DriveView() {
               style={{
                 fontSize: "10.5px",
                 fontWeight: 700,
-                color: isSelected ? (isDark ? "#ffffff" : "#2563eb") : c.textMuted,
+                color: isSelected ? (isDark ? "#ffffff" : "var(--acc)") : c.textMuted,
                 background: isSelected
-                  ? (isDark ? "rgba(255,255,255,0.12)" : "#dbeafe")
+                  ? (isDark ? "rgba(255,255,255,0.12)" : "var(--acc-line)")
                   : c.subtleBg,
                 padding: "1px 6px",
                 borderRadius: "10px",
@@ -737,10 +737,10 @@ export function DriveView() {
               borderRadius: "20px",
               textAlign: "center",
               boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
-              border: "2px dashed #2563eb",
+              border: "2px dashed var(--acc)",
             }}
           >
-            <UploadCloud size={48} style={{ color: "#2563eb", margin: "0 auto 12px" }} />
+            <UploadCloud size={48} style={{ color: "var(--acc)", margin: "0 auto 12px" }} />
             <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 4px", color: c.textHeading }}>
               Déposez vos fichiers ici
             </h3>
@@ -890,7 +890,7 @@ export function DriveView() {
               gap: "4px",
             }}
           >
-            <Star size={11} fill={treeTab === "starred" ? "#2563eb" : "none"} style={{ color: "#2563eb" }} />
+            <Star size={11} fill={treeTab === "starred" ? "var(--acc)" : "none"} style={{ color: "var(--acc)" }} />
             Tags
           </button>
         </div>
@@ -917,7 +917,7 @@ export function DriveView() {
               borderRadius: "8px",
               border: "none",
               background: currentFolderId === null && treeTab === "folders" ? c.activeTreeBg : "transparent",
-              color: currentFolderId === null && treeTab === "folders" ? (isDark ? "#ffffff" : "#2563eb") : c.textBody,
+              color: currentFolderId === null && treeTab === "folders" ? (isDark ? "#ffffff" : "var(--acc)") : c.textBody,
               fontSize: "12.5px",
               fontWeight: currentFolderId === null && treeTab === "folders" ? 700 : 600,
               display: "flex",
@@ -929,7 +929,7 @@ export function DriveView() {
             }}
           >
             {currentFolderId === null ? (
-              <FolderOpen size={15} style={{ color: isDark ? "#ffffff" : "#2563eb" }} />
+              <FolderOpen size={15} style={{ color: isDark ? "#ffffff" : "var(--acc)" }} />
             ) : (
               <Home size={15} style={{ color: isDark ? "#94a3b8" : "#64748b" }} />
             )}
@@ -987,7 +987,7 @@ export function DriveView() {
               style={{
                 height: "100%",
                 width: Math.min(100, Math.max(4, stats.totalFiles * 6)) + "%",
-                background: "#2563eb",
+                background: "var(--acc)",
                 borderRadius: "4px",
               }}
             />
@@ -1188,7 +1188,7 @@ export function DriveView() {
                 cursor: "pointer",
               }}
             >
-              <FolderPlus size={14} style={{ color: "#2563eb" }} />
+              <FolderPlus size={14} style={{ color: "var(--acc)" }} />
               <span>Nouveau dossier</span>
             </button>
 
@@ -1202,7 +1202,7 @@ export function DriveView() {
                 padding: "0 14px",
                 borderRadius: "9px",
                 border: "none",
-                background: "#2563eb",
+                background: "var(--acc)",
                 color: "#ffffff",
                 fontSize: "12px",
                 fontWeight: 650,
@@ -1248,7 +1248,7 @@ export function DriveView() {
         <div style={{ marginTop: "16px", flex: 1 }}>
           {loading ? (
             <div style={{ padding: "40px 0", textAlign: "center" }}>
-              <RefreshCw size={22} className="animate-spin" style={{ color: "#2563eb", margin: "0 auto 8px" }} />
+              <RefreshCw size={22} className="animate-spin" style={{ color: "var(--acc)", margin: "0 auto 8px" }} />
               <p style={{ color: "#64748b", fontSize: "13px", fontWeight: 600 }}>Chargement…</p>
             </div>
           ) : items.length === 0 ? (
@@ -1301,7 +1301,7 @@ export function DriveView() {
                     padding: "0 12px",
                     borderRadius: "8px",
                     border: "none",
-                    background: "#2563eb",
+                    background: "var(--acc)",
                     color: "#ffffff",
                     fontSize: "12px",
                     fontWeight: 600,
@@ -1395,12 +1395,12 @@ export function DriveView() {
                               style={{
                                 background: "transparent",
                                 border: "none",
-                                color: folder.starred ? "#2563eb" : (isDark ? "#475569" : "#cbd5e1"),
+                                color: folder.starred ? "var(--acc)" : (isDark ? "#475569" : "#cbd5e1"),
                                 cursor: "pointer",
                                 padding: "2px",
                               }}
                             >
-                              <Star size={13} fill={folder.starred ? "#2563eb" : "none"} />
+                              <Star size={13} fill={folder.starred ? "var(--acc)" : "none"} />
                             </button>
                             <button
                               type="button"
@@ -1619,7 +1619,7 @@ export function DriveView() {
                                 setSelectedIds(new Set());
                               }
                             }}
-                            style={{ cursor: "pointer", accentColor: "#2563eb" }}
+                            style={{ cursor: "pointer", accentColor: "var(--acc)" }}
                           />
                         </div>
                         <span>Name</span>
@@ -1653,7 +1653,7 @@ export function DriveView() {
                               cursor: "pointer",
                               transition: "background 0.12s ease",
                               background: isSelected
-                                ? (isDark ? "rgba(37,99,235,0.12)" : "#eff6ff")
+                                ? (isDark ? "rgba(37,99,235,0.12)" : "var(--acc-soft)")
                                 : "transparent",
                             }}
                             onMouseEnter={(e) => {
@@ -1672,7 +1672,7 @@ export function DriveView() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => {}}
-                                style={{ cursor: "pointer", accentColor: "#2563eb" }}
+                                style={{ cursor: "pointer", accentColor: "var(--acc)" }}
                               />
                             </div>
 
@@ -1719,7 +1719,7 @@ export function DriveView() {
                                   width: "22px",
                                   height: "22px",
                                   borderRadius: "50%",
-                                  background: "#2563eb",
+                                  background: "var(--acc)",
                                   color: "#ffffff",
                                   fontWeight: 800,
                                   fontSize: "9.5px",
@@ -1821,7 +1821,7 @@ export function DriveView() {
                               minHeight: "150px",
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = "#2563eb";
+                              e.currentTarget.style.borderColor = "var(--acc)";
                               e.currentTarget.style.boxShadow = "0 6px 14px rgba(0,0,0,0.06)";
                               e.currentTarget.style.transform = "translateY(-1px)";
                             }}
@@ -1850,7 +1850,7 @@ export function DriveView() {
                                   style={{ width: "100%", height: "100%", objectFit: "contain", padding: "6px" }}
                                 />
                               ) : (
-                                <IconComponent size={28} style={{ color: "#2563eb" }} />
+                                <IconComponent size={28} style={{ color: "var(--acc)" }} />
                               )}
                               <button
                                 type="button"
@@ -1866,11 +1866,11 @@ export function DriveView() {
                                   height: "22px",
                                   display: "grid",
                                   placeItems: "center",
-                                  color: file.starred ? "#2563eb" : "#94a3b8",
+                                  color: file.starred ? "var(--acc)" : "#94a3b8",
                                   cursor: "pointer",
                                 }}
                               >
-                                <Star size={11} fill={file.starred ? "#2563eb" : "none"} />
+                                <Star size={11} fill={file.starred ? "var(--acc)" : "none"} />
                               </button>
                             </div>
 
@@ -1943,7 +1943,7 @@ export function DriveView() {
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FolderPlus size={18} style={{ color: "#2563eb" }} />
+                <FolderPlus size={18} style={{ color: "var(--acc)" }} />
                 <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: c.textHeading }}>
                   Nouveau dossier
                 </h3>
@@ -1996,7 +1996,7 @@ export function DriveView() {
                         height: "28px",
                         borderRadius: "50%",
                         background: fc.value,
-                        border: newFolderColor === fc.value ? "2.5px solid #2563eb" : (isDark ? "2px solid #1e293b" : "2px solid #ffffff"),
+                        border: newFolderColor === fc.value ? "2.5px solid var(--acc)" : (isDark ? "2px solid #1e293b" : "2px solid #ffffff"),
                         boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
                         cursor: "pointer",
                       }}
@@ -2028,7 +2028,7 @@ export function DriveView() {
                     padding: "6px 16px",
                     borderRadius: "8px",
                     border: "none",
-                    background: "#2563eb",
+                    background: "var(--acc)",
                     color: "#ffffff",
                     fontSize: "12.5px",
                     fontWeight: 600,
@@ -2129,7 +2129,7 @@ export function DriveView() {
                     padding: "6px 16px",
                     borderRadius: "8px",
                     border: "none",
-                    background: "#2563eb",
+                    background: "var(--acc)",
                     color: "#ffffff",
                     fontSize: "12.5px",
                     fontWeight: 600,
@@ -2174,7 +2174,7 @@ export function DriveView() {
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Move size={17} style={{ color: "#2563eb" }} />
+                <Move size={17} style={{ color: "var(--acc)" }} />
                 <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: c.textHeading }}>
                   Déplacer &quot;{moveItem.name}&quot;
                 </h3>
@@ -2212,8 +2212,8 @@ export function DriveView() {
                     padding: "8px 10px",
                     borderRadius: "7px",
                     border: "1px solid",
-                    borderColor: moveTargetParentId === null ? "#2563eb" : "transparent",
-                    background: moveTargetParentId === null ? (isDark ? "rgba(37,99,235,0.2)" : "#eff6ff") : "transparent",
+                    borderColor: moveTargetParentId === null ? "var(--acc)" : "transparent",
+                    background: moveTargetParentId === null ? (isDark ? "rgba(37,99,235,0.2)" : "var(--acc-soft)") : "transparent",
                     textAlign: "left",
                     display: "flex",
                     alignItems: "center",
@@ -2221,7 +2221,7 @@ export function DriveView() {
                     cursor: "pointer",
                     fontSize: "12.5px",
                     fontWeight: 650,
-                    color: moveTargetParentId === null ? "#2563eb" : c.textBody,
+                    color: moveTargetParentId === null ? "var(--acc)" : c.textBody,
                   }}
                 >
                   <Home size={14} />
@@ -2242,8 +2242,8 @@ export function DriveView() {
                           padding: "8px 10px",
                           borderRadius: "7px",
                           border: "1px solid",
-                          borderColor: isSelected ? "#2563eb" : "transparent",
-                          background: isSelected ? (isDark ? "rgba(37,99,235,0.2)" : "#eff6ff") : "transparent",
+                          borderColor: isSelected ? "var(--acc)" : "transparent",
+                          background: isSelected ? (isDark ? "rgba(37,99,235,0.2)" : "var(--acc-soft)") : "transparent",
                           textAlign: "left",
                           display: "flex",
                           alignItems: "center",
@@ -2251,7 +2251,7 @@ export function DriveView() {
                           cursor: "pointer",
                           fontSize: "12.5px",
                           fontWeight: 650,
-                          color: isSelected ? "#2563eb" : c.textBody,
+                          color: isSelected ? "var(--acc)" : c.textBody,
                         }}
                       >
                         <Folder size={14} style={{ color: f.color || "#64748b" }} />
@@ -2287,7 +2287,7 @@ export function DriveView() {
                     padding: "6px 16px",
                     borderRadius: "8px",
                     border: "none",
-                    background: "#2563eb",
+                    background: "var(--acc)",
                     color: "#ffffff",
                     fontSize: "12.5px",
                     fontWeight: 600,
@@ -2480,7 +2480,7 @@ export function DriveView() {
                         padding: "8px 16px",
                         borderRadius: "9px",
                         border: "none",
-                        background: "#2563eb",
+                        background: "var(--acc)",
                         color: "#ffffff",
                         fontSize: "12.5px",
                         fontWeight: 650,

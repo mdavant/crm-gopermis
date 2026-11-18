@@ -21,6 +21,24 @@ interface AppContextType {
   setSidebarOpen: (open: boolean) => void;
   theme: "light" | "dark";
   toggleTheme: () => void;
+  accent: AccentId;
+  setAccent: (id: AccentId) => void;
+}
+
+export const ACCENTS = [
+  { id: "corail", label: "Corail", value: "#e5484d" },
+  { id: "ambre", label: "Ambre", value: "#e8833a" },
+  { id: "emeraude", label: "Émeraude", value: "#12a594" },
+  { id: "ocean", label: "Océan", value: "#3e7bfa" },
+  { id: "violet", label: "Violet", value: "#8e4ec6" },
+  { id: "framboise", label: "Framboise", value: "#d6409f" },
+] as const;
+export type AccentId = (typeof ACCENTS)[number]["id"];
+
+function applyAccent(id: string) {
+  const found = ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
+  document.documentElement.style.setProperty("--acc", found.value);
+  return found.id;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -34,6 +52,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [accent, setAccentState] = useState<AccentId>("corail");
+
+  useEffect(() => {
+    try {
+      setAccentState(applyAccent(localStorage.getItem("gopermis-accent") ?? "corail") as AccentId);
+    } catch {
+      // stockage indisponible : accent par défaut
+    }
+  }, []);
+
+  const setAccent = useCallback((id: AccentId) => {
+    setAccentState(applyAccent(id) as AccentId);
+    try {
+      localStorage.setItem("gopermis-accent", id);
+    } catch {
+      // ignore
+    }
+  }, []);
   const [selectedClientIdForBooking, setSelectedClientIdForBooking] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -134,6 +170,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSidebarOpen,
         theme,
         toggleTheme,
+        accent,
+        setAccent,
       }}
     >
       {children}

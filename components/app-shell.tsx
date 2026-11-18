@@ -23,6 +23,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { NotificationBell } from "./notification-bell";
 import { clearPreviewSession } from "../lib/session";
 import { api } from "../lib/api-types";
+import { CommandPalette, type PaletteAction } from "./command-palette";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const {
@@ -34,6 +35,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sidebarOpen,
     setSidebarOpen,
     theme,
+    setCreateClientOpen,
+    can,
   } = useApp();
 
   const pathname = usePathname();
@@ -98,8 +101,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
+  const paletteActions: PaletteAction[] = [
+    ...navItems.map((item) => ({
+      id: "nav-" + item.href,
+      label: item.label,
+      icon: item.icon,
+      run: () => router.push(item.href),
+    })),
+    ...(can("clients.write")
+      ? [{ id: "new-client", label: "Nouveau client", keywords: "ajouter eleve", run: () => setCreateClientOpen(true) }]
+      : []),
+  ];
+
   return (
     <div className="appShell">
+      <CommandPalette actions={paletteActions} onOpenClient={(id) => router.push(`/clients/${id}`)} canSearchClients={can("clients.read")} />
       {/* Mobile Backdrop Overlay */}
       {sidebarOpen && (
         <div
@@ -124,7 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div
             className="brandMark"
             style={{
-              background: "#2563eb",
+              background: "var(--acc)",
               color: "#ffffff",
               boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
             }}
@@ -157,8 +173,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             // Active in dark mode: pure white icon and text with soft ambient glow, subtle background pill
             // Active in light mode: electric blue text/icon with soft blue background
-            const activeBg = isDark ? "rgba(255, 255, 255, 0.08)" : "#eff6ff";
-            const activeColor = isDark ? "#ffffff" : "#2563eb";
+            const activeBg = isDark ? "rgba(255, 255, 255, 0.08)" : "var(--acc-soft)";
+            const activeColor = isDark ? "#ffffff" : "var(--acc)";
             const inactiveColor = isDark ? "#94a3b8" : "#666a73";
 
             return (

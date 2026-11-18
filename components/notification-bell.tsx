@@ -95,9 +95,9 @@ export function NotificationBell() {
           borderRadius: "11px",
           border: isDark ? "1px solid #334155" : "1px solid #e2e8f0",
           background: open
-            ? (isDark ? "#1e293b" : "#eff6ff")
+            ? (isDark ? "#1e293b" : "var(--acc-soft)")
             : (isDark ? "#131d31" : "#ffffff"),
-          color: open ? "#2563eb" : (isDark ? "#cbd5e1" : "#475569"),
+          color: open ? "var(--acc)" : (isDark ? "#cbd5e1" : "#475569"),
           display: "grid",
           placeItems: "center",
           position: "relative",
@@ -113,7 +113,7 @@ export function NotificationBell() {
               position: "absolute",
               top: "-3px",
               right: "-3px",
-              background: "#2563eb",
+              background: "var(--acc)",
               color: "#ffffff",
               fontSize: "10px",
               fontWeight: 800,
@@ -161,13 +161,13 @@ export function NotificationBell() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Bell size={16} style={{ color: "#2563eb" }} />
+              <Bell size={16} style={{ color: "var(--acc)" }} />
               <strong style={{ fontSize: "14px", color: isDark ? "#f8fafc" : "#0f172a" }}>Notifications</strong>
               {unreadCount > 0 && (
                 <span
                   style={{
-                    background: isDark ? "rgba(37, 99, 235, 0.2)" : "#eff6ff",
-                    color: "#2563eb",
+                    background: isDark ? "rgba(37, 99, 235, 0.2)" : "var(--acc-soft)",
+                    color: "var(--acc)",
                     fontSize: "11px",
                     fontWeight: 700,
                     padding: "2px 7px",
@@ -188,7 +188,7 @@ export function NotificationBell() {
                   style={{
                     background: "transparent",
                     border: "none",
-                    color: "#2563eb",
+                    color: "var(--acc)",
                     fontSize: "11px",
                     fontWeight: 650,
                     cursor: "pointer",
@@ -300,13 +300,13 @@ export function NotificationBell() {
                       borderRadius: "8px",
                       background:
                         item.category === "planning"
-                          ? (isDark ? "#1e293b" : "#dbeafe")
+                          ? (isDark ? "#1e293b" : "var(--acc-line)")
                           : item.category === "dossier"
                           ? (isDark ? "#2a2216" : "#fef3c7")
                           : (isDark ? "#261d36" : "#f3e8ff"),
                       color:
                         item.category === "planning"
-                          ? (isDark ? "#60a5fa" : "#2563eb")
+                          ? (isDark ? "#60a5fa" : "var(--acc)")
                           : item.category === "dossier"
                           ? (isDark ? "#fbbf24" : "#d97706")
                           : (isDark ? "#c084fc" : "#9333ea"),
@@ -344,7 +344,7 @@ export function NotificationBell() {
                         width: "7px",
                         height: "7px",
                         borderRadius: "50%",
-                        background: "#2563eb",
+                        background: "var(--acc)",
                         alignSelf: "center",
                         flexShrink: 0,
                       }}

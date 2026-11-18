@@ -291,7 +291,7 @@ export default function ClientsDirectoryPage() {
                           client.status === "Permis obtenu"
                             ? "#ecfdf5"
                             : client.status === "En formation"
-                            ? "#eff6ff"
+                            ? "var(--acc-soft)"
                             : client.status === "Archivé"
                             ? "#f1f5f9"
                             : "#fff7ed",
@@ -299,7 +299,7 @@ export default function ClientsDirectoryPage() {
                           client.status === "Permis obtenu"
                             ? "#059669"
                             : client.status === "En formation"
-                            ? "#2563eb"
+                            ? "var(--acc)"
                             : client.status === "Archivé"
                             ? "#64748b"
                             : "#ea580c",

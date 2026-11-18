@@ -32,6 +32,8 @@ import { DonneesView } from "../components/donnees-view";
 import { ThemeToggle } from "../components/theme-toggle";
 import { AuthGate } from "../components/auth-gate";
 import { AdminPanel } from "../components/admin-panel";
+import { CommandPalette, type PaletteAction } from "../components/command-palette";
+import { Plus, UserCircle2 } from "lucide-react";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -160,8 +162,30 @@ export default function Home() {
     user.roles?.includes("admin")
   );
 
+  const go = (v: typeof view) => () => {
+    setView(v);
+    setDetail(null);
+  };
+  const paletteActions: PaletteAction[] = [
+    { id: "nav-home", label: "Tableau de bord", icon: HomeIcon, keywords: "accueil", run: go("Accueil") },
+    ...(can("schedule.read")
+      ? [{ id: "nav-planning", label: "Planning", icon: CalendarDays, keywords: "calendrier seances agenda", run: go("Planning") }]
+      : []),
+    { id: "nav-clients", label: "Élèves & dossiers", icon: Users, keywords: "clients eleves", run: go("Clients") },
+    { id: "nav-drive", label: "Drive", icon: HardDrive, keywords: "documents fichiers", run: go("Drive") },
+    { id: "nav-data", label: "Données : tarifs & véhicules", icon: Database, keywords: "tarifs vehicules moniteurs", run: go("Donnees") },
+    { id: "nav-profile", label: "Mon profil", icon: UserCircle2, keywords: "compte parametres mot de passe", run: go("Profil") },
+    ...(isAdmin
+      ? [{ id: "nav-admin", label: "Panel admin", icon: ShieldCheck, keywords: "utilisateurs roles permissions", run: go("AdminPanel") }]
+      : []),
+    ...(can("clients.write")
+      ? [{ id: "new-client", label: "Nouveau client", icon: Plus, keywords: "ajouter eleve creer", run: () => setCreate(true) }]
+      : []),
+  ];
+
   return (
     <div className="dualAppShell">
+      <CommandPalette actions={paletteActions} onOpenClient={(id) => void open(id)} canSearchClients={can("clients.read")} />
       {/* 1. Ultra-Slim Left Rail (Dock: 60px wide, vertically centered, no top logo, profile directly below) */}
       <aside className="dockRail">
         <nav className="dockNavStack">

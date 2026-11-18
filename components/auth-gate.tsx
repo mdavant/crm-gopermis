@@ -97,7 +97,7 @@ export function AuthGate({
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
-        background: isDark ? "#090d16" : "#f1f3f9",
+        background: isDark ? "#090d16" : "transparent",
         color: isDark ? "#f8fafc" : "#0f172a",
         fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
         position: "relative",
@@ -107,14 +107,17 @@ export function AuthGate({
         .authContainer {
           width: 100%;
           max-width: 440px;
-          background: ${isDark ? "#0f172a" : "#ffffff"};
+          background: ${isDark ? "#0f172a" : "linear-gradient(155deg, rgba(255,255,255,.62), rgba(255,255,255,.26))"};
           border-radius: 24px;
           overflow: hidden;
+          backdrop-filter: blur(40px) saturate(1.5);
+          -webkit-backdrop-filter: blur(40px) saturate(1.5);
           box-shadow: ${
             isDark
               ? "0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px #1e293b"
-              : "0 20px 50px -10px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(226, 232, 240, 0.9)"
+              : "var(--glass-shadow), 0 0 0 1px rgba(255, 255, 255, 0.75)"
           };
+          animation: glassRise 1.1s var(--ease-out) both;
           display: flex;
           flex-direction: column;
           transition: all 0.3s ease;
@@ -190,7 +193,7 @@ export function AuthGate({
           className="authMobileBanner"
           style={{
             background:
-              "linear-gradient(135deg, #1d4ed8 0%, #2563eb 45%, #3b82f6 80%, #4f46e5 100%)",
+              "linear-gradient(135deg, var(--acc-ink) 0%, var(--acc) 45%, var(--acc-2) 80%, color-mix(in oklab, var(--acc) 70%, #5b0f0f) 100%)",
             padding: "32px 24px 28px",
             position: "relative",
             overflow: "hidden",
@@ -220,7 +223,7 @@ export function AuthGate({
               width: "200px",
               height: "200px",
               background:
-                "radial-gradient(circle, rgba(59,130,246,0.6) 0%, rgba(29,78,216,0) 70%)",
+                "radial-gradient(circle, rgba(255,190,150,0.55) 0%, rgba(255,190,150,0) 70%)",
               borderRadius: "50%",
               pointerEvents: "none",
             }}
@@ -300,7 +303,7 @@ export function AuthGate({
           style={{
             borderRadius: "22px",
             background:
-              "linear-gradient(135deg, #1d4ed8 0%, #2563eb 40%, #3b82f6 75%, #4f46e5 100%)",
+              "linear-gradient(135deg, var(--acc-ink) 0%, var(--acc) 40%, var(--acc-2) 75%, color-mix(in oklab, var(--acc) 70%, #5b0f0f) 100%)",
             position: "relative",
             overflow: "hidden",
             padding: "44px 38px",
@@ -331,7 +334,7 @@ export function AuthGate({
               width: "280px",
               height: "280px",
               background:
-                "radial-gradient(circle, rgba(59,130,246,0.5) 0%, rgba(29,78,216,0) 70%)",
+                "radial-gradient(circle, rgba(255,190,150,0.5) 0%, rgba(255,190,150,0) 70%)",
               borderRadius: "50%",
               pointerEvents: "none",
             }}
@@ -407,7 +410,7 @@ export function AuthGate({
               style={{
                 fontSize: "28px",
                 fontWeight: 900,
-                color: "#2563eb",
+                color: "var(--acc)",
                 display: "inline-block",
                 lineHeight: 1,
               }}
@@ -547,7 +550,7 @@ export function AuthGate({
                             border: isDark
                               ? "1px solid #334155"
                               : "1px solid #e2e8f0",
-                            background: isDark ? "#1e293b" : "#f8fafc",
+                            background: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
                             color: isDark ? "#f8fafc" : "#0f172a",
                             fontSize: "13.5px",
                             outline: "none",
@@ -555,7 +558,7 @@ export function AuthGate({
                               "border-color 0.15s ease, box-shadow 0.15s ease",
                           }}
                           onFocus={(e) => {
-                            e.currentTarget.style.borderColor = "#2563eb";
+                            e.currentTarget.style.borderColor = "var(--acc)";
                             e.currentTarget.style.boxShadow =
                               "0 0 0 3px rgba(37, 99, 235, 0.15)";
                           }}
@@ -616,7 +619,7 @@ export function AuthGate({
                           border: isDark
                             ? "1px solid #334155"
                             : "1px solid #e2e8f0",
-                          background: isDark ? "#1e293b" : "#f8fafc",
+                          background: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
                           color: isDark ? "#f8fafc" : "#0f172a",
                           fontSize: "13.5px",
                           outline: "none",
@@ -624,7 +627,7 @@ export function AuthGate({
                             "border-color 0.15s ease, box-shadow 0.15s ease",
                         }}
                         onFocus={(e) => {
-                          e.currentTarget.style.borderColor = "#2563eb";
+                          e.currentTarget.style.borderColor = "var(--acc)";
                           e.currentTarget.style.boxShadow =
                             "0 0 0 3px rgba(37, 99, 235, 0.15)";
                         }}
@@ -690,7 +693,7 @@ export function AuthGate({
                           border: isDark
                             ? "1px solid #334155"
                             : "1px solid #e2e8f0",
-                          background: isDark ? "#1e293b" : "#f8fafc",
+                          background: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
                           color: isDark ? "#f8fafc" : "#0f172a",
                           fontSize: "13.5px",
                           outline: "none",
@@ -698,7 +701,7 @@ export function AuthGate({
                             "border-color 0.15s ease, box-shadow 0.15s ease",
                         }}
                         onFocus={(e) => {
-                          e.currentTarget.style.borderColor = "#2563eb";
+                          e.currentTarget.style.borderColor = "var(--acc)";
                           e.currentTarget.style.boxShadow =
                             "0 0 0 3px rgba(37, 99, 235, 0.15)";
                         }}
@@ -781,7 +784,7 @@ export function AuthGate({
                             border: isDark
                               ? "1px solid #334155"
                               : "1px solid #e2e8f0",
-                            background: isDark ? "#1e293b" : "#f8fafc",
+                            background: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
                             color: isDark ? "#f8fafc" : "#0f172a",
                             fontSize: "13.5px",
                             outline: "none",
@@ -799,7 +802,7 @@ export function AuthGate({
                       height: "48px",
                       borderRadius: "14px",
                       border: "none",
-                      background: "#2563eb",
+                      background: "var(--acc)",
                       color: "#ffffff",
                       fontSize: "14.5px",
                       fontWeight: 700,
@@ -813,10 +816,10 @@ export function AuthGate({
                       marginTop: "6px",
                     }}
                     onMouseEnter={(e) => {
-                      if (!busy) e.currentTarget.style.background = "#1d4ed8";
+                      if (!busy) e.currentTarget.style.background = "var(--acc-ink)";
                     }}
                     onMouseLeave={(e) => {
-                      if (!busy) e.currentTarget.style.background = "#2563eb";
+                      if (!busy) e.currentTarget.style.background = "var(--acc)";
                     }}
                   >
                     <span>
@@ -852,7 +855,7 @@ export function AuthGate({
                     marginBottom: "4px",
                   }}
                 >
-                  <ShieldCheck size={14} color="#2563eb" />
+                  <ShieldCheck size={14} color="var(--acc)" />
                   <span style={{ fontWeight: 600 }}>Espace collaborateur sécurisé</span>
                 </div>
                 <p

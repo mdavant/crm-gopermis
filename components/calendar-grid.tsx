@@ -329,7 +329,7 @@ export function CalendarGrid() {
           </div>
           <div className="filterList">
             {resources?.vehicles.map((v, i) => {
-              const colors = ["#2563eb", "#3b82f6", "#10b981", "#8b5cf6", "#64748b", "#334155"];
+              const colors = ["var(--acc)", "var(--acc-2)", "#10b981", "#8b5cf6", "#64748b", "#334155"];
               const dotColor = colors[i % colors.length];
               return (
                 <label key={v.id} className="filterItem">
@@ -399,7 +399,7 @@ export function CalendarGrid() {
                   setSelectedStatus((prev) => ({ ...prev, confirmed: e.target.checked }))
                 }
               />
-              <span className="filterDot" style={{ backgroundColor: "#2563eb" }} />
+              <span className="filterDot" style={{ backgroundColor: "var(--acc)" }} />
               <span>Confirmée</span>
             </label>
             <label className="filterItem">
@@ -445,7 +445,7 @@ export function CalendarGrid() {
               <button
                 type="button"
                 className={viewMode === "week" ? "active" : ""}
-                style={viewMode === "week" ? { background: "#2563eb", color: "#ffffff" } : {}}
+                style={viewMode === "week" ? { background: "var(--acc)", color: "#ffffff" } : {}}
                 onClick={() => setViewMode("week")}
               >
                 Semaine
@@ -453,7 +453,7 @@ export function CalendarGrid() {
               <button
                 type="button"
                 className={viewMode === "day" ? "active" : ""}
-                style={viewMode === "day" ? { background: "#2563eb", color: "#ffffff" } : {}}
+                style={viewMode === "day" ? { background: "var(--acc)", color: "#ffffff" } : {}}
                 onClick={() => setViewMode("day")}
               >
                 Jour
@@ -466,7 +466,7 @@ export function CalendarGrid() {
                 type="button"
                 className="btnPrimary"
                 style={{
-                  background: "#2563eb",
+                  background: "var(--acc)",
                   color: "#ffffff",
                   boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
                 }}
@@ -618,8 +618,8 @@ export function CalendarGrid() {
                   width: "44px",
                   height: "44px",
                   borderRadius: "12px",
-                  background: selectedBooking.status === "completed" ? "#ecfdf5" : "#eff6ff",
-                  color: selectedBooking.status === "completed" ? "#059669" : "#2563eb",
+                  background: selectedBooking.status === "completed" ? "#ecfdf5" : "var(--acc-soft)",
+                  color: selectedBooking.status === "completed" ? "#059669" : "var(--acc)",
                   display: "grid",
                   placeItems: "center",
                   fontWeight: 800,

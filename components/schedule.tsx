@@ -61,11 +61,32 @@ export function IntervalFields() {
   );
 }
 
-// Format hour for display in calendar grid (08 AM, 09 AM, 12 PM, 01 PM, etc.)
+// Heure affichée dans la grille (08:00, 09:00…)
 function formatHourAMPM(hour: number): string {
-  const h = hour % 12 === 0 ? 12 : hour % 12;
-  const ampm = hour < 12 ? "AM" : "PM";
-  return `${h.toString().padStart(2, "0")} ${ampm}`;
+  return `${hour.toString().padStart(2, "0")}:00`;
+}
+
+const timeFr = (value: string) =>
+  new Date(value).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+/** Heure courante, rafraîchie chaque minute (ligne rouge « maintenant »). */
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function NowLine({ now }: { now: Date }) {
+  return (
+    <div className="nowLine" style={{ top: `${(now.getMinutes() / 60) * 100}%` }} aria-hidden="true">
+      <span className="nowPill">
+        {now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+      </span>
+    </div>
+  );
 }
 
 export function Schedule({
@@ -83,6 +104,7 @@ export function Schedule({
   onDateChange?: (date: Date) => void;
   activeFilters?: string[];
 }) {
+  const now = useNow();
   const [rows, setRows] = useState<Booking[]>([]);
   const [resources, setResources] = useState<Resources | null>(null);
   const [clients, setClients] = useState<ClientRecord[]>([]);
@@ -237,11 +259,19 @@ export function Schedule({
 
   // Visual color palette for real bookings
   const cardColorStyles = [
-    { bg: "#fff1f2", border: "#ffe4e6", text: "#881337", subtext: "#9f1239", avatarBg: "#fecdd3", avatarText: "#9f1239" },
-    { bg: "#f0fdf4", border: "#dcfce7", text: "#14532d", subtext: "#166534", avatarBg: "#bbf7d0", avatarText: "#166534" },
-    { bg: "#f0f7ff", border: "#e0f2fe", text: "#0c4a6e", subtext: "#0369a1", avatarBg: "#bae6fd", avatarText: "#0369a1" },
-    { bg: "#fffbeb", border: "#fef3c7", text: "#78350f", subtext: "#92400e", avatarBg: "#fde68a", avatarText: "#92400e" },
+    { bg: "color-mix(in oklab, var(--acc) 16%, rgba(255,255,255,.55))", border: "var(--acc)", text: "var(--acc-ink)", subtext: "var(--acc-ink)", avatarBg: "var(--acc)", avatarText: "#ffffff" },
+    { bg: "rgba(209, 250, 229, 0.6)", border: "#34d399", text: "#14532d", subtext: "#166534", avatarBg: "#34d399", avatarText: "#ffffff" },
+    { bg: "rgba(254, 243, 199, 0.65)", border: "#f59e0b", text: "#78350f", subtext: "#92400e", avatarBg: "#f59e0b", avatarText: "#ffffff" },
+    { bg: "rgba(237, 233, 254, 0.65)", border: "#8b5cf6", text: "#3b0764", subtext: "#5b21b6", avatarBg: "#8b5cf6", avatarText: "#ffffff" },
   ];
+
+  // Couleur d'une séance selon le type de véhicule (cf. légende « Ressources »)
+  const paletteFor = (b: Booking) => {
+    const label = (b.vehicle_label || "").toLowerCase();
+    if (label.includes("rs3") || label.includes("audi")) return cardColorStyles[3];
+    if (label.includes("auto")) return cardColorStyles[1];
+    return cardColorStyles[0];
+  };
 
   // Real bookings only! No fabricated dummy sessions!
   const activeBookings = activeFilters ? rows.filter(b => activeFilters.includes(b.status)) : rows;
@@ -313,14 +343,14 @@ export function Schedule({
       {/* Top Header Bar matching reference image */}
       <div className="calendarTopBar">
         <div className="calendarBreadcrumb">
-          <span>Calendar</span>
+          <span>Planning</span>
           <span className="crumbSep">&gt;</span>
-          <span className="crumbCurrent">All Calendar</span>
+          <span className="crumbCurrent">Toutes les séances</span>
         </div>
 
         <div className="calendarTitleRow">
           <div>
-            <h1 className="calendarMainTitle">Calendar</h1>
+            <h1 className="calendarMainTitle">Planning</h1>
             <div className="calendarDateBadgeRow">
               <div className="calendarMonthDropdown">
                 <span>
@@ -377,21 +407,21 @@ export function Schedule({
                 className={`viewPillBtn ${calendarView === "Day" ? "active" : ""}`}
                 onClick={() => setCalendarView("Day")}
               >
-                Day
+                Jour
               </button>
               <button
                 type="button"
                 className={`viewPillBtn ${calendarView === "Week" ? "active" : ""}`}
                 onClick={() => setCalendarView("Week")}
               >
-                Week
+                Semaine
               </button>
               <button
                 type="button"
                 className={`viewPillBtn ${calendarView === "Month" ? "active" : ""}`}
                 onClick={() => setCalendarView("Month")}
               >
-                Month
+                Mois
               </button>
             </div>
 
@@ -410,7 +440,7 @@ export function Schedule({
                 }}
               >
                 <Plus size={16} />
-                <span>New Event</span>
+                <span>Nouvelle séance</span>
               </button>
             )}
           </div>
@@ -444,7 +474,7 @@ export function Schedule({
                 </th>
                 {weekDays.map((day, idx) => {
                   const dayNum = day.getDate();
-                  const dayName = day.toLocaleDateString("en-US", { weekday: "long" });
+                  const dayName = day.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
                   const isToday = new Date().toDateString() === day.toDateString();
 
                   return (
@@ -466,43 +496,40 @@ export function Schedule({
                   </td>
                   {weekDays.map((day, dayIdx) => {
                     const slotBookings = getBookingsForSlot(day, hour);
+                    const isNowCell =
+                      now.toDateString() === day.toDateString() && now.getHours() === hour;
+                    const isTodayCol = now.toDateString() === day.toDateString();
 
                     return (
                       <td
                         key={dayIdx}
-                        className="calendarSlotCell"
+                        className={`calendarSlotCell ${isTodayCol ? "todaySlotCell" : ""}`}
                         onClick={() => {
                           if (can("schedule.write") && slotBookings.length === 0) {
                             handleSlotClick(day, hour);
                           }
                         }}
                       >
-                        {slotBookings.map((b, bIdx) => {
-                          const palette = cardColorStyles[bIdx % cardColorStyles.length];
+                        {isNowCell && <NowLine now={now} />}
+                        {slotBookings.map((b) => {
+                          const palette = paletteFor(b);
                           const durHours = Math.max(1, Math.round(b.minutes / 60));
                           const spanStyle =
                             durHours > 1
                               ? { minHeight: `${durHours * 96 - 12}px`, zIndex: 5 }
                               : {};
 
-                          const startH = new Date(b.starts_at).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          });
-                          const endH = new Date(b.ends_at).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          });
+                          const startH = timeFr(b.starts_at);
+                          const endH = timeFr(b.ends_at);
 
                           return (
                             <div
                               key={b.id}
                               className="eventCard"
                               style={{
-                                backgroundColor: palette.bg,
+                                background: palette.bg,
                                 borderColor: palette.border,
+                                ["--ev" as string]: palette.border,
                                 color: palette.text,
                                 ...spanStyle,
                               }}
@@ -585,6 +612,8 @@ export function Schedule({
                 >
                   <div className="dayTimeLabel">{formatHourAMPM(hour)}</div>
                   <div className="daySlotArea">
+                    {now.toDateString() === currentDate.toDateString() &&
+                      now.getHours() === hour && <NowLine now={now} />}
                     {slotBookings.length === 0 ? (
                       <div className="emptyDaySlot">
                         <span>Créneau libre · Cliquez pour planifier</span>

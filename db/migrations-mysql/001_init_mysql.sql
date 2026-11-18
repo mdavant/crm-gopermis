@@ -321,6 +321,8 @@ CREATE TABLE IF NOT EXISTS drive_items (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   created_by CHAR(36) NULL,
+  trashed_at DATETIME(3) NULL,
+  trash_root_id CHAR(36) NULL,
   KEY idx_drive_items_parent (parent_id),
   KEY idx_drive_items_type (type),
   KEY idx_drive_items_name (name),

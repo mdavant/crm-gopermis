@@ -72,39 +72,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const [selectedClientIdForBooking, setSelectedClientIdForBooking] = useState<string | undefined>(undefined);
 
+  // Thème unique (clair, verre dépoli) : l'ancien thème sombre est retiré.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("gopermis-theme") as "light" | "dark" | null;
-      const initial = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-      setTheme(initial);
-      document.documentElement.setAttribute("data-theme", initial);
-      if (initial === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
+      localStorage.removeItem("gopermis-theme");
     } catch {
-      // fallback
+      // ignore
     }
+    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.classList.remove("dark");
   }, []);
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      try {
-        localStorage.setItem("gopermis-theme", next);
-        document.documentElement.setAttribute("data-theme", next);
-        if (next === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      } catch {
-        // fallback
-      }
-      return next;
-    });
-  }, []);
+  const toggleTheme = useCallback(() => setTheme("light"), []);
 
   const can = useCallback((p: string) => user?.permissions.includes(p) ?? false, [user]);
 

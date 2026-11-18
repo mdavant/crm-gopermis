@@ -28,9 +28,22 @@ export function maxUploadBytes(): number {
   return Number.isFinite(n) && n > 0 ? n : 10 * 1024 * 1024;
 }
 
+/**
+ * Dossier de stockage des fichiers.
+ * En production sans STORAGE_DIR, on stocke HORS du dossier de la version
+ * déployée (sinon chaque redéploiement Hostinger efface les fichiers) :
+ * ~/gopermis-data/uploads.
+ */
 export function getStorageRoot(): string {
-  const configured = (process.env.STORAGE_DIR || ".data/uploads").trim();
-  const root = resolve(process.cwd(), configured);
+  const explicit = (process.env.STORAGE_DIR || "").trim();
+  const home = (process.env.HOME || "").trim();
+  const persistentBase = process.env.NODE_ENV === "production" && home ? resolve(home, "gopermis-data") : process.cwd();
+  // Un chemin relatif est résolu dans le dossier persistant (jamais dans la version déployée).
+  const root = explicit
+    ? resolve(persistentBase, explicit)
+    : persistentBase === process.cwd()
+      ? resolve(process.cwd(), ".data/uploads")
+      : resolve(persistentBase, "uploads");
   const publicDir = resolve(process.cwd(), "public");
   if (root === publicDir || root.startsWith(publicDir + sep)) {
     throw new HttpError(

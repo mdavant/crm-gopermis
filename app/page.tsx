@@ -33,10 +33,12 @@ import { ThemeToggle } from "../components/theme-toggle";
 import { AuthGate } from "../components/auth-gate";
 import { AdminPanel } from "../components/admin-panel";
 import { ForcePasswordChange } from "../components/force-password";
+import { useApp } from "../components/app-context";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { Plus, UserCircle2 } from "lucide-react";
 
 export default function Home() {
+  const { refreshUser: refreshContextUser } = useApp();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,6 +68,7 @@ export default function Home() {
   const refresh = useCallback(async () => {
     const u = await api<User>("me");
     setUser(u);
+    void refreshContextUser();
     if (u.mustChangePassword) return;
     if (!u.permissions.includes("clients.read")) {
       setRows([]);
@@ -87,7 +90,7 @@ export default function Home() {
     setBookings(bList);
     setResources(resData);
     setSummary(stats);
-  }, []);
+  }, [refreshContextUser]);
 
   useEffect(() => {
     const expired=()=>{setUser(null);setRows([]);setDetail(null);setCat(null);setResources(null);setBookings([]);setSummary(null);};
@@ -263,19 +266,7 @@ export default function Home() {
             <Database size={19} />
           </button>
 
-          {isAdmin && (
-            <button
-              type="button"
-              className={`dockIconBtn ${view === "AdminPanel" ? "active" : ""}`}
-              onClick={() => {
-                setView("AdminPanel");
-                setDetail(null);
-              }}
-              title="Panel Admin (Gestion des profils & permissions)"
-            >
-              <ShieldCheck size={19} />
-            </button>
-          )}
+
 
           {/* User Profile Avatar directly beneath icons */}
           <div
@@ -396,7 +387,7 @@ export default function Home() {
 
           {/* VIEW: DRIVE & DOCUMENTS */}
           {view === "Drive" && (
-            <div style={{ padding: "16px 20px" }}>
+            <div style={{ padding: "16px 20px 16px 6px", width: "100%", boxSizing: "border-box", alignSelf: "stretch" }}>
               <DriveView />
             </div>
           )}

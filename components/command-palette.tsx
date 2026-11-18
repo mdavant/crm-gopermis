@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, CornerDownLeft, User as UserIcon, Palette, Moon, Sun } from "lucide-react";
+import { Search, CornerDownLeft, User as UserIcon, Palette } from "lucide-react";
 import { api, type ClientRecord } from "../lib/api-types";
 import { ACCENTS, useApp } from "./app-context";
 
@@ -41,7 +41,7 @@ export function CommandPalette({
   onOpenClient?: (id: string) => void;
   canSearchClients?: boolean;
 }) {
-  const { theme, toggleTheme, setAccent, accent } = useApp();
+  const { setAccent, accent } = useApp();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -105,13 +105,6 @@ export function CommandPalette({
   const items = useMemo(() => {
     const base: PaletteAction[] = [
       ...actions,
-      {
-        id: "theme",
-        label: theme === "dark" ? "Passer au thème clair" : "Passer au thème sombre",
-        icon: theme === "dark" ? Sun : Moon,
-        keywords: "theme sombre clair dark light mode",
-        run: toggleTheme,
-      },
       ...ACCENTS.map((a) => ({
         id: "accent-" + a.id,
         label: `Couleur : ${a.label}`,
@@ -133,7 +126,7 @@ export function CommandPalette({
       run: () => onOpenClient?.(c.id),
     }));
     return [...clientItems, ...filtered];
-  }, [actions, clients, q, theme, toggleTheme, accent, setAccent, onOpenClient]);
+  }, [actions, clients, q, accent, setAccent, onOpenClient]);
 
   useEffect(() => setSel(0), [q, clients.length]);
 

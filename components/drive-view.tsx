@@ -1,2505 +1,1142 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  File,
-  FileText,
-  FileSpreadsheet,
-  Image as ImageIcon,
-  Download,
-  Trash2,
-  Edit3,
-  Move,
-  Star,
-  Search,
-  Grid,
-  List,
-  UploadCloud,
-  Home,
-  MoreVertical,
-  X,
   HardDrive,
-  RefreshCw,
-  Check,
-  Plus,
-  ChevronDown,
+  Clock3,
+  Star,
+  Trash2,
+  FolderPlus,
+  Upload,
+  Search,
+  LayoutGrid,
+  List,
+  ChevronRight,
+  Download,
+  FolderInput,
+  Copy,
+  CopyPlus,
+  Pencil,
+  RotateCcw,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  MoreHorizontal,
+  Eye,
+  Scissors,
+  ClipboardPaste,
 } from "lucide-react";
-import {
-  api,
-  type DriveItem,
-  type BreadcrumbItem,
-  type DriveFolderTreeNode,
-  type DriveResponse,
-} from "../lib/api-types";
+import { api } from "../lib/api-types";
+import { previewToken } from "../lib/session";
 import { useApp } from "./app-context";
+import { Modal } from "./modal";
+import { FileTypeIcon, FolderIcon, fileTypeInfo } from "./file-icons";
 
-function formatBytes(bytes: number, decimals = 1) {
-  if (bytes === 0) return "0 Ko";
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Octets", "Ko", "Mo", "Go"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
-}
+/* ------------------------------------------------------------------ Types */
 
-function formatDate(iso: string) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
+type Entry = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  type: "folder" | "file";
+  mimeType: string | null;
+  size: number;
+  starred: boolean;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  trashedAt: string | null;
+  creatorName: string | null;
+  childCount: number;
+  url: string | null;
+};
+type TreeNode = { id: string; name: string; parentId: string | null; color: string | null; itemCount: number };
+type ListResponse = {
+  items: Entry[];
+  breadcrumbs: { id: string | null; name: string }[];
+  tree: TreeNode[];
+  stats: { files: number; folders: number; bytes: number; trashBytes: number; trashCount: number };
+  limits: { chunkBytes: number; maxFileBytes: number; trashRetentionDays: number };
+};
+type View = "folder" | "recent" | "starred" | "trash";
+type UploadJob = {
+  key: string;
+  name: string;
+  size: number;
+  sent: number;
+  status: "queued" | "uploading" | "done" | "error" | "cancelled";
+  error?: string;
+  file: File;
+  parentId: string | null;
+};
 
-function getFileMeta(item: DriveItem) {
-  const mime = item.mimeType?.toLowerCase() || "";
-  const name = item.name.toLowerCase();
-
-  if (mime.includes("pdf") || name.endsWith(".pdf")) {
-    return {
-      type: "pdf",
-      label: "PDF",
-      bg: "#fee2e2",
-      color: "#dc2626",
-      icon: FileText,
-    };
-  }
-  if (
-    mime.includes("word") ||
-    mime.includes("document") ||
-    name.endsWith(".doc") ||
-    name.endsWith(".docx")
-  ) {
-    return {
-      type: "word",
-      label: "Word",
-      bg: "#eff6ff",
-      color: "#2563eb",
-      icon: FileText,
-    };
-  }
-  if (
-    mime.includes("sheet") ||
-    mime.includes("excel") ||
-    mime.includes("csv") ||
-    name.endsWith(".xls") ||
-    name.endsWith(".xlsx") ||
-    name.endsWith(".csv")
-  ) {
-    return {
-      type: "excel",
-      label: "Excel",
-      bg: "#ecfdf5",
-      color: "#059669",
-      icon: FileSpreadsheet,
-    };
-  }
-  if (
-    mime.startsWith("image/") ||
-    name.endsWith(".png") ||
-    name.endsWith(".jpg") ||
-    name.endsWith(".jpeg") ||
-    name.endsWith(".webp") ||
-    name.endsWith(".svg")
-  ) {
-    return {
-      type: "image",
-      label: "Image",
-      bg: "#f8fafc",
-      color: "#475569",
-      icon: ImageIcon,
-    };
-  }
-  return {
-    type: "other",
-    label: "Fichier",
-    bg: "#f1f5f9",
-    color: "#64748b",
-    icon: File,
-  };
-}
-
-// Strict palette: Noir, Gris, Blanc, Bleu Électrique
-const FOLDER_COLORS = [
-  { label: "Gris Anthracite", value: "#475569" },
-  { label: "Gris Ardoise Foncé", value: "#334155" },
-  { label: "Bleu Électrique", value: "#2563eb" },
-  { label: "Bleu Nuit", value: "#1e3a8a" },
-  { label: "Noir Graphite", value: "#18181b" },
-  { label: "Gris Acier", value: "#64748b" },
+const KINDS = [
+  { id: "all", label: "Tout" },
+  { id: "folder", label: "Dossiers" },
+  { id: "pdf", label: "PDF" },
+  { id: "doc", label: "Documents" },
+  { id: "sheet", label: "Tableurs" },
+  { id: "image", label: "Images" },
+  { id: "video", label: "Vidéos" },
+  { id: "audio", label: "Audio" },
+  { id: "archive", label: "Archives" },
 ];
+const FOLDER_COLORS = ["#e5484d", "#e8833a", "#d4a72c", "#12a594", "#3e7bfa", "#8e4ec6", "#d6409f", "#64748b"];
 
-/**
- * BigFolderGraphic: Faithfully reproduces the large grey folder with documents peeking out
- * and app badges on the front flap from image_2a30fcab.png
- */
-function BigFolderGraphic({
-  isDark,
-  color = "#475569",
-}: {
-  isDark: boolean;
-  color?: string | null;
-}) {
-  const folderDarkSlate = isDark ? "#334155" : "#475569";
-  const folderFlapSlate = isDark ? "#3b4758" : "#525f73";
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: "148px",
-        height: "105px",
-        margin: "8px auto 14px",
-        userSelect: "none",
-      }}
-    >
-      {/* Back tab */}
-      <div
-        style={{
-          position: "absolute",
-          top: "6px",
-          left: "10px",
-          width: "55px",
-          height: "22px",
-          background: color || folderDarkSlate,
-          borderRadius: "8px 8px 0 0",
-        }}
-      />
-
-      {/* Staggered papers sticking out of top pocket */}
-      {/* Sheet 1 (left tilted) */}
-      <div
-        style={{
-          position: "absolute",
-          top: "1px",
-          left: "22px",
-          width: "68px",
-          height: "52px",
-          background: "#ffffff",
-          borderRadius: "5px",
-          boxShadow: "0 2px 5px rgba(0,0,0,0.18)",
-          transform: "rotate(-6deg)",
-          border: "1px solid rgba(0,0,0,0.08)",
-          padding: "5px 6px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "3px",
-        }}
-      >
-        <div style={{ width: "32px", height: "3px", background: "#cbd5e1", borderRadius: "2px" }} />
-        <div style={{ width: "45px", height: "2.5px", background: "#e2e8f0", borderRadius: "2px" }} />
-        <div style={{ width: "24px", height: "2.5px", background: "#e2e8f0", borderRadius: "2px" }} />
-      </div>
-
-      {/* Sheet 2 (right tilted with PDF badge) */}
-      <div
-        style={{
-          position: "absolute",
-          top: "4px",
-          left: "58px",
-          width: "68px",
-          height: "50px",
-          background: "#ffffff",
-          borderRadius: "5px",
-          boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
-          transform: "rotate(4deg)",
-          border: "1px solid rgba(0,0,0,0.08)",
-          padding: "5px 6px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <span
-            style={{
-              fontSize: "6.5px",
-              fontWeight: 900,
-              background: "#0f172a",
-              color: "#ffffff",
-              padding: "1px 3px",
-              borderRadius: "2px",
-              letterSpacing: "0.04em",
-            }}
-          >
-            PDF
-          </span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          <div style={{ width: "36px", height: "2.5px", background: "#cbd5e1", borderRadius: "2px" }} />
-          <div style={{ width: "26px", height: "2.5px", background: "#e2e8f0", borderRadius: "2px" }} />
-        </div>
-      </div>
-
-      {/* Front folder pocket / flap */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "0px",
-          left: "4px",
-          right: "4px",
-          height: "76px",
-          background: folderFlapSlate,
-          borderRadius: "14px",
-          boxShadow: isDark
-            ? "0 8px 18px rgba(0,0,0,0.4)"
-            : "0 8px 18px rgba(15,23,42,0.22)",
-          padding: "10px 12px",
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          borderTop: "1px solid rgba(255,255,255,0.22)",
-        }}
-      >
-        {/* Front badges matching Image 2 (Google Drive / Notion / Slack style badges) */}
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <div
-            style={{
-              width: "17px",
-              height: "17px",
-              borderRadius: "50%",
-              background: "var(--acc)",
-              display: "grid",
-              placeItems: "center",
-              color: "#ffffff",
-              fontSize: "8px",
-              fontWeight: 800,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-            }}
-            title="Drive"
-          >
-            ▲
-          </div>
-          <div
-            style={{
-              width: "17px",
-              height: "17px",
-              borderRadius: "4px",
-              background: "#0f172a",
-              display: "grid",
-              placeItems: "center",
-              color: "#ffffff",
-              fontSize: "8.5px",
-              fontWeight: 900,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-            }}
-            title="Docs"
-          >
-            N
-          </div>
-          <div
-            style={{
-              width: "17px",
-              height: "17px",
-              borderRadius: "50%",
-              background: "#10b981",
-              display: "grid",
-              placeItems: "center",
-              color: "#ffffff",
-              fontSize: "7.5px",
-              fontWeight: 800,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-            }}
-            title="Sheets"
-          >
-            ✓
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+export function formatBytes(n: number) {
+  if (!n) return "0 o";
+  const u = ["o", "Ko", "Mo", "Go", "To"];
+  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  return `${(n / 1024 ** i).toLocaleString("fr-FR", { maximumFractionDigits: i ? 1 : 0 })} ${u[i]}`;
 }
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+
+const authHeaders = (): Record<string, string> => {
+  const t = previewToken();
+  return t ? { Authorization: "Bearer " + t } : {};
+};
+
+/* ---------------------------------------------------------------- Composant */
 
 export function DriveView() {
-  const { theme } = useApp();
-  const isDark = theme === "dark";
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [items, setItems] = useState<DriveItem[]>([]);
-  const [currentFolder, setCurrentFolder] = useState<DriveItem | null>(null);
-  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
-    { id: null, name: "Mon Drive" },
-  ]);
-  const [folderTree, setFolderTree] = useState<DriveFolderTreeNode[]>([]);
-  const [stats, setStats] = useState({ totalFiles: 0, totalFolders: 0, totalSizeBytes: 0 });
+  const { can } = useApp();
+  const canWrite = can("drive.write") || can("admin.full");
+  const canDelete = can("drive.delete") || can("admin.full");
+
+  const [view, setView] = useState<View>("folder");
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState("all");
+  const [layout, setLayout] = useState<"list" | "grid">(() => {
+    try {
+      return (localStorage.getItem("gopermis-drive-layout") as "list" | "grid") || "list";
+    } catch {
+      return "list";
+    }
+  });
+  const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-  const [treeSearch, setTreeSearch] = useState("");
-  const [treeTab, setTreeTab] = useState<"folders" | "starred">("folders");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const lastClicked = useRef<string | null>(null);
+  const [clipboard, setClipboard] = useState<{ ids: string[]; mode: "copy" | "cut" } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [dialog, setDialog] = useState<
+    | { kind: "folder" }
+    | { kind: "rename"; item: Entry }
+    | { kind: "move" | "copy"; ids: string[] }
+    | { kind: "color"; item: Entry }
+    | null
+  >(null);
+  const [preview, setPreview] = useState<Entry | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [externalDrag, setExternalDrag] = useState(false);
+  const [uploads, setUploads] = useState<UploadJob[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const fileInput = useRef<HTMLInputElement>(null);
+  const cancelled = useRef<Set<string>>(new Set());
 
-  // Modals & Actions
-  const [createFolderOpen, setCreateFolderOpen] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [newFolderColor, setNewFolderColor] = useState("#475569");
-
-  const [renameItem, setRenameItem] = useState<DriveItem | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-
-  const [moveItem, setMoveItem] = useState<DriveItem | null>(null);
-  const [moveTargetParentId, setMoveTargetParentId] = useState<string | null>(null);
-
-  const [previewItem, setPreviewItem] = useState<DriveItem | null>(null);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  // Drag & drop and upload state
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgressMsg, setUploadProgressMsg] = useState("");
-
-  const loadDrive = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const load = useCallback(async () => {
+    const sp = new URLSearchParams({ view });
+    if (folderId && view === "folder") sp.set("parentId", folderId);
+    if (q.trim()) sp.set("q", q.trim());
+    if (kind !== "all") sp.set("kind", kind);
     try {
-      const sp = new URLSearchParams();
-      if (currentFolderId) sp.set("parentId", currentFolderId);
-      if (search.trim()) sp.set("q", search.trim());
-      if (filterType !== "all" && filterType !== "starred") sp.set("filter", filterType);
-      if (filterType === "starred" || treeTab === "starred") sp.set("starred", "true");
-
-      const res = await api<DriveResponse>(`drive/items?${sp.toString()}`);
-      setItems(res.items);
-      setCurrentFolder(res.currentFolder);
-      setBreadcrumbs(res.breadcrumbs);
-      setFolderTree(res.folderTree || []);
-      setStats(res.stats);
-    } catch (err) {
-      setError((err as Error).message);
+      const res = await api<ListResponse>("drive2/list?" + sp.toString());
+      setData(res);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [currentFolderId, search, filterType, treeTab]);
+  }, [view, folderId, q, kind]);
 
   useEffect(() => {
-    loadDrive();
-  }, [loadDrive]);
+    const t = setTimeout(() => void load(), q ? 220 : 0);
+    return () => clearTimeout(t);
+  }, [load, q]);
 
-  const handleToggleStar = async (item: DriveItem, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  useEffect(() => setSelected(new Set()), [view, folderId, q, kind]);
+
+  useEffect(() => {
     try {
-      await api("drive/update", {
-        id: item.id,
-        updates: { starred: !item.starred },
-      });
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
+      localStorage.setItem("gopermis-drive-layout", layout);
+    } catch {
+      // ignore
     }
-  };
+  }, [layout]);
 
-  const handleCreateFolder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFolderName.trim()) return;
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const selItems = useMemo(() => items.filter((i) => selected.has(i.id)), [items, selected]);
+  const inTrash = view === "trash";
+
+  async function run(fn: () => Promise<unknown>, success?: string) {
     try {
-      await api("drive/folder", {
-        name: newFolderName.trim(),
-        parentId: currentFolderId,
-        color: newFolderColor,
-      });
-      setNewFolderName("");
-      setCreateFolderOpen(false);
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
+      await fn();
+      if (success) setToast(success);
+      await load();
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
     }
+  }
+
+  const open = (it: Entry) => {
+    if (inTrash) return;
+    if (it.type === "folder") {
+      setView("folder");
+      setQ("");
+      setFolderId(it.id);
+    } else setPreview(it);
   };
 
-  const handleRename = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!renameItem || !renameValue.trim()) return;
-    try {
-      await api("drive/update", {
-        id: renameItem.id,
-        updates: { name: renameValue.trim() },
-      });
-      setRenameItem(null);
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
-    }
+  const goFolder = (id: string | null) => {
+    setView("folder");
+    setQ("");
+    setKind("all");
+    setFolderId(id);
   };
 
-  const handleMove = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!moveItem) return;
-    try {
-      await api("drive/update", {
-        id: moveItem.id,
-        updates: { parentId: moveTargetParentId },
-      });
-      setMoveItem(null);
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
+  /* ------------------------------------------------------------ Sélection */
 
-  const handleDelete = async (item: DriveItem, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const isFolder = item.type === "folder";
-    const msg = isFolder
-      ? `Supprimer définitivement le dossier "${item.name}" et tout son contenu ?`
-      : `Supprimer définitivement le fichier "${item.name}" ?`;
-    if (!window.confirm(msg)) return;
-
-    try {
-      await api("drive/delete", { id: item.id });
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const processFiles = async (filesToUpload: FileList | File[]) => {
-    if (!filesToUpload || filesToUpload.length === 0) return;
-    setUploading(true);
-    setUploadProgressMsg(`Importation de ${filesToUpload.length} élément(s)…`);
-    setError("");
-
-    try {
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        setUploadProgressMsg(`Envoi de ${file.name} (${i + 1}/${filesToUpload.length})…`);
-
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        await api("drive/file", {
-          name: file.name,
-          parentId: currentFolderId,
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
-          data: dataUrl,
-        });
-      }
-      await loadDrive();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setUploading(false);
-      setUploadProgressMsg("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) processFiles(e.target.files);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+  const clickItem = (e: React.MouseEvent, it: Entry) => {
     e.stopPropagation();
-    setIsDraggingOver(true);
+    setMenu(null);
+    const next = new Set(e.metaKey || e.ctrlKey ? selected : []);
+    if (e.shiftKey && lastClicked.current) {
+      const a = items.findIndex((x) => x.id === lastClicked.current);
+      const b = items.findIndex((x) => x.id === it.id);
+      if (a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(items[i].id);
+    } else if ((e.metaKey || e.ctrlKey) && selected.has(it.id)) next.delete(it.id);
+    else next.add(it.id);
+    lastClicked.current = it.id;
+    setSelected(next);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingOver(false);
+  const toggleCheck = (it: Entry) => {
+    const next = new Set(selected);
+    if (next.has(it.id)) next.delete(it.id);
+    else next.add(it.id);
+    lastClicked.current = it.id;
+    setSelected(next);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingOver(false);
-    if (e.dataTransfer.files) {
-      processFiles(e.dataTransfer.files);
-    }
+  const ids = () => [...selected];
+
+  /* -------------------------------------------------------------- Actions */
+
+  const download = (list: Entry[]) => {
+    const files = list.filter((i) => i.type === "file" && i.url);
+    files.forEach((f, i) =>
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = f.url!;
+        a.download = f.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, i * 350),
+    );
+    if (list.some((i) => i.type === "folder")) setToast("Les dossiers ne se téléchargent pas d'un bloc : ouvrez-les pour récupérer leurs fichiers.");
   };
 
-  const handleDownload = (item: DriveItem, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!item.data) {
-      alert("Le contenu de ce fichier n'est pas disponible.");
+  const trash = (list: string[]) =>
+    run(() => api("drive2/trash", { ids: list }), `${list.length} élément${list.length > 1 ? "s" : ""} placé${list.length > 1 ? "s" : ""} dans la corbeille.`);
+  const restore = (list: string[]) => run(() => api("drive2/restore", { ids: list }), "Éléments restaurés.");
+  const purge = (list: string[]) => {
+    if (!window.confirm(`Supprimer définitivement ${list.length} élément(s) ? Cette action est irréversible.`)) return;
+    void run(() => api("drive2/purge", { ids: list }), "Suppression définitive effectuée.");
+  };
+  const duplicate = (list: string[]) => run(() => api("drive2/copy", { ids: list }), "Copie créée.");
+  const toggleStar = (list: Entry[]) => {
+    const starred = !list.every((i) => i.starred);
+    void run(() => api("drive2/update", { ids: list.map((i) => i.id), starred }), starred ? "Ajouté aux favoris." : "Retiré des favoris.");
+  };
+  const paste = () => {
+    if (!clipboard) return;
+    const target = view === "folder" ? folderId : null;
+    void run(
+      () =>
+        clipboard.mode === "cut"
+          ? api("drive2/move", { ids: clipboard.ids, parentId: target })
+          : api("drive2/copy", { ids: clipboard.ids, parentId: target, keepName: false }),
+      clipboard.mode === "cut" ? "Éléments déplacés." : "Éléments collés.",
+    ).then((ok) => ok && clipboard.mode === "cut" && setClipboard(null));
+  };
+
+  /* ---------------------------------------------------------- Clavier */
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return;
+      if (document.querySelector(".modalBackdrop, .cmdBackdrop")) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setSelected(new Set(items.map((i) => i.id)));
+      } else if (e.key === "Escape") {
+        setSelected(new Set());
+        setMenu(null);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selected.size && canDelete) {
+        e.preventDefault();
+        if (inTrash) purge(ids());
+        else void trash(ids());
+      } else if (e.key === "F2" && selItems.length === 1 && canWrite && !inTrash) {
+        e.preventDefault();
+        setDialog({ kind: "rename", item: selItems[0] });
+      } else if (mod && e.key.toLowerCase() === "c" && selected.size && !inTrash) {
+        setClipboard({ ids: ids(), mode: "copy" });
+        setToast(`${selected.size} élément(s) copié(s) — Ctrl/⌘ V pour coller.`);
+      } else if (mod && e.key.toLowerCase() === "x" && selected.size && canWrite && !inTrash) {
+        setClipboard({ ids: ids(), mode: "cut" });
+        setToast(`${selected.size} élément(s) coupé(s) — Ctrl/⌘ V pour coller.`);
+      } else if (mod && e.key.toLowerCase() === "v" && clipboard && canWrite && view === "folder") {
+        e.preventDefault();
+        paste();
+      } else if (e.key === "Enter" && selItems.length === 1) open(selItems[0]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  /* ------------------------------------------------------------- Envois */
+
+  const enqueue = (files: FileList | File[], parentId: string | null) => {
+    if (!canWrite) {
+      setError("Vous n'avez pas l'autorisation d'ajouter des fichiers.");
       return;
     }
-    const a = document.createElement("a");
-    a.href = item.data;
-    a.download = item.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const jobs: UploadJob[] = Array.from(files).map((f) => ({
+      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: f.name,
+      size: f.size,
+      sent: 0,
+      status: "queued",
+      file: f,
+      parentId,
+    }));
+    if (jobs.length) setUploads((u) => [...u.filter((j) => j.status !== "done"), ...jobs]);
   };
 
-  const toggleSelect = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const patchJob = (key: string, patch: Partial<UploadJob>) =>
+    setUploads((u) => u.map((j) => (j.key === key ? { ...j, ...patch } : j)));
 
-  const folders = items.filter((it) => it.type === "folder");
-  const files = items.filter((it) => it.type === "file");
+  const uploadOne = useCallback(
+    async (job: UploadJob) => {
+      patchJob(job.key, { status: "uploading" });
+      try {
+        const start = await api<{ uploadId: string; chunkBytes: number }>("drive2/upload/start", {
+          name: job.name,
+          size: job.size,
+          mimeType: job.file.type || undefined,
+          parentId: job.parentId,
+        });
+        let offset = 0;
+        while (offset < job.size) {
+          if (cancelled.current.has(job.key)) throw new Error("Annulé");
+          const blob = job.file.slice(offset, offset + start.chunkBytes);
+          let attempt = 0;
+          for (;;) {
+            try {
+              const r = await fetch(`/api/drive2/upload/chunk?id=${start.uploadId}&offset=${offset}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/octet-stream", ...authHeaders() },
+                credentials: "same-origin",
+                body: blob,
+              });
+              const body = await r.json().catch(() => ({}));
+              if (!r.ok) throw Object.assign(new Error(body.error || "Échec de l'envoi"), { status: r.status });
+              offset = Number(body.received);
+              break;
+            } catch (e) {
+              const status = (e as { status?: number }).status ?? 0;
+              if (status && status < 500) throw e;
+              if (++attempt > 4) throw e;
+              await new Promise((res) => setTimeout(res, 800 * attempt));
+            }
+          }
+          patchJob(job.key, { sent: offset });
+        }
+        await api("drive2/upload/finish", { uploadId: start.uploadId });
+        patchJob(job.key, { status: "done", sent: job.size });
+      } catch (e) {
+        const msg = (e as Error).message;
+        patchJob(job.key, { status: cancelled.current.has(job.key) ? "cancelled" : "error", error: msg });
+      }
+    },
+    [],
+  );
 
-  const c = {
-    surface: isDark ? "#0b101b" : "transparent",
-    cardBg: isDark ? "#111827" : "rgba(255, 255, 255, 0.42)",
-    subtleBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.5)",
-    inputBg: isDark ? "#131d31" : "rgba(255, 255, 255, 0.6)",
-    border: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.8)",
-    borderInput: isDark ? "#334155" : "rgba(255, 255, 255, 0.9)",
-    textHeading: isDark ? "#f8fafc" : "var(--ink)",
-    textBody: isDark ? "#cbd5e1" : "var(--ink-2)",
-    textMuted: isDark ? "#94a3b8" : "var(--ink-3)",
-    hoverBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.6)",
-    activeTreeBg: isDark ? "#1e293b" : "var(--acc-soft)",
-    branchLine: isDark ? "#334155" : "rgba(120, 60, 45, 0.18)",
-  };
-
-  // Build recursive tree structure with branch connecting lines (Image 2 style)
-  const buildTree = (parentId: string | null = null, depth = 0): React.ReactNode[] => {
-    let directChildren = folderTree.filter((f) => f.parentId === parentId);
-    if (treeSearch.trim()) {
-      directChildren = directChildren.filter((f) =>
-        f.name.toLowerCase().includes(treeSearch.trim().toLowerCase())
-      );
+  // File d'attente : 2 envois en parallèle.
+  useEffect(() => {
+    const active = uploads.filter((j) => j.status === "uploading").length;
+    const next = uploads.filter((j) => j.status === "queued").slice(0, Math.max(0, 2 - active));
+    next.forEach((j) => void uploadOne(j));
+    if (uploads.length && uploads.every((j) => j.status !== "queued" && j.status !== "uploading")) {
+      void load();
+      // Ferme le panneau quelques secondes après la fin, s'il n'y a pas d'erreur.
+      if (uploads.every((j) => j.status === "done")) {
+        const t = setTimeout(() => setUploads((u) => (u.every((j) => j.status === "done") ? [] : u)), 4000);
+        return () => clearTimeout(t);
+      }
     }
-    if (directChildren.length === 0) return [];
+  }, [uploads, uploadOne, load]);
 
-    return directChildren.map((f, index) => {
-      const isSelected = currentFolderId === f.id;
-      const subNodes = buildTree(f.id, depth + 1);
-      const isLastChild = index === directChildren.length - 1;
+  /* ------------------------------------------------- Glisser-déposer */
 
+  const onItemDragStart = (e: React.DragEvent, it: Entry) => {
+    if (!canWrite || inTrash) return e.preventDefault();
+    const list = selected.has(it.id) ? ids() : [it.id];
+    if (!selected.has(it.id)) setSelected(new Set([it.id]));
+    e.dataTransfer.setData("application/x-gopermis-drive", JSON.stringify(list));
+    e.dataTransfer.effectAllowed = "copyMove";
+    const ghost = document.createElement("div");
+    ghost.className = "dragGhost";
+    ghost.textContent = list.length > 1 ? `${list.length} éléments` : it.name;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 10, 10);
+    setTimeout(() => ghost.remove(), 0);
+  };
+
+  const isInternal = (e: React.DragEvent) => e.dataTransfer.types.includes("application/x-gopermis-drive");
+  const isExternal = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
+  const dropOn = (target: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!canWrite || inTrash || !(isInternal(e) || isExternal(e))) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = isInternal(e) ? (e.altKey ? "copy" : "move") : "copy";
+      setDropTarget(target ?? "root");
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      e.stopPropagation();
+      setDropTarget((d) => (d === (target ?? "root") ? null : d));
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!canWrite || inTrash) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropTarget(null);
+      setExternalDrag(false);
+      const raw = e.dataTransfer.getData("application/x-gopermis-drive");
+      if (raw) {
+        const list = (JSON.parse(raw) as string[]).filter((id) => id !== target);
+        if (!list.length) return;
+        void run(
+          () => api(e.altKey ? "drive2/copy" : "drive2/move", { ids: list, parentId: target, keepName: true }),
+          e.altKey ? "Éléments copiés." : "Éléments déplacés.",
+        );
+      } else if (e.dataTransfer.files.length) enqueue(e.dataTransfer.files, target);
+    },
+  });
+
+  const currentTarget = view === "folder" ? folderId : null;
+
+  /* ---------------------------------------------------------- Rendu */
+
+  const tree = data?.tree ?? [];
+  const children = (pid: string | null) => tree.filter((t) => t.parentId === pid);
+
+  const renderTree = (pid: string | null, depth: number): React.ReactNode =>
+    children(pid).map((n) => {
+      const kids = children(n.id);
+      const isOpen = expanded.has(n.id);
+      const active = view === "folder" && folderId === n.id;
       return (
-        <div key={f.id} style={{ display: "flex", flexDirection: "column", position: "relative" }}>
-          {/* Vertical connecting line for hierarchy depth */}
-          {depth > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                left: `${10 + (depth - 1) * 16}px`,
-                top: 0,
-                bottom: isLastChild ? "50%" : 0,
-                width: "1.5px",
-                background: c.branchLine,
-              }}
-            />
-          )}
-
-          {/* Horizontal branch elbow line connecting to the item */}
-          {depth > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                left: `${10 + (depth - 1) * 16}px`,
-                top: "50%",
-                width: "12px",
-                height: "1px",
-                background: c.branchLine,
-              }}
-            />
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentFolderId(f.id);
-              setSearch("");
-            }}
-            style={{
-              padding: `7px 8px 7px ${12 + depth * 16}px`,
-              borderRadius: "8px",
-              border: "none",
-              background: isSelected ? c.activeTreeBg : "transparent",
-              color: isSelected ? (isDark ? "#ffffff" : "var(--acc)") : c.textBody,
-              fontSize: "12.5px",
-              fontWeight: isSelected ? 700 : 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              textAlign: "left",
-              cursor: "pointer",
-              transition: "all 0.12s ease",
-              position: "relative",
-            }}
-            onMouseEnter={(e) => {
-              if (!isSelected) e.currentTarget.style.background = c.hoverBg;
-            }}
-            onMouseLeave={(e) => {
-              if (!isSelected) e.currentTarget.style.background = "transparent";
-            }}
+        <div key={n.id}>
+          <div
+            className={`dTreeRow ${active ? "active" : ""} ${dropTarget === n.id ? "drop" : ""}`}
+            style={{ paddingLeft: 8 + depth * 14 }}
+            onClick={() => goFolder(n.id)}
+            {...dropOn(n.id)}
           >
-            {/* Open icon when selected/opened, normal folder when closed */}
-            {isSelected ? (
-              <FolderOpen
-                size={15}
-                style={{
-                  color: isDark ? "#ffffff" : "var(--acc)",
-                  flexShrink: 0,
-                }}
-              />
-            ) : (
-              <Folder
-                size={15}
-                style={{
-                  color: isDark ? "#94a3b8" : "#64748b",
-                  flexShrink: 0,
-                }}
-              />
-            )}
-
-            <span
-              style={{
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                flex: 1,
+            <button
+              type="button"
+              className={`dTreeCaret ${kids.length ? "" : "hidden"} ${isOpen ? "open" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const next = new Set(expanded);
+                if (isOpen) next.delete(n.id);
+                else next.add(n.id);
+                setExpanded(next);
               }}
+              aria-label={isOpen ? "Replier" : "Déplier"}
             >
-              {f.name}
-            </span>
-
-            {/* Item count badge on the right (matching Image 2) */}
-            <span
-              style={{
-                fontSize: "10.5px",
-                fontWeight: 700,
-                color: isSelected ? (isDark ? "#ffffff" : "var(--acc)") : c.textMuted,
-                background: isSelected
-                  ? (isDark ? "rgba(255,255,255,0.12)" : "var(--acc-line)")
-                  : c.subtleBg,
-                padding: "1px 6px",
-                borderRadius: "10px",
-                flexShrink: 0,
-              }}
-            >
-              {f.itemCount ?? 0}
-            </span>
-          </button>
-
-          {/* Nested sub-tree */}
-          {subNodes.length > 0 && (
-            <div style={{ position: "relative" }}>
-              {subNodes}
-            </div>
-          )}
+              <ChevronRight size={13} />
+            </button>
+            <FolderIcon color={n.color} size={18} open={active} />
+            <span className="dTreeName">{n.name}</span>
+            {n.itemCount > 0 && <span className="dTreeCount">{n.itemCount}</span>}
+          </div>
+          {isOpen && renderTree(n.id, depth + 1)}
         </div>
       );
     });
+
+  // Déplie automatiquement le chemin du dossier ouvert.
+  useEffect(() => {
+    if (!data?.breadcrumbs?.length) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      data.breadcrumbs.forEach((b) => b.id && next.add(b.id));
+      return next;
+    });
+  }, [data?.breadcrumbs]);
+
+  const title =
+    q.trim() ? `Résultats pour « ${q.trim()} »` : view === "recent" ? "Récents" : view === "starred" ? "Favoris" : view === "trash" ? "Corbeille" : null;
+
+  const actionsFor = (list: Entry[]) => {
+    const one = list.length === 1 ? list[0] : null;
+    if (inTrash)
+      return [
+        canDelete && { key: "restore", label: "Restaurer", icon: RotateCcw, run: () => void restore(list.map((i) => i.id)) },
+        canDelete && { key: "purge", label: "Supprimer définitivement", icon: Trash2, danger: true, run: () => purge(list.map((i) => i.id)) },
+      ];
+    return [
+      one && { key: "open", label: one.type === "folder" ? "Ouvrir" : "Aperçu", icon: Eye, run: () => open(one) },
+      list.some((i) => i.type === "file") && { key: "dl", label: "Télécharger", icon: Download, run: () => download(list) },
+      canWrite && one && { key: "rename", label: "Renommer", icon: Pencil, kbd: "F2", run: () => setDialog({ kind: "rename", item: one }) },
+      canWrite && { key: "move", label: "Déplacer vers…", icon: FolderInput, run: () => setDialog({ kind: "move", ids: list.map((i) => i.id) }) },
+      canWrite && { key: "copyto", label: "Copier vers…", icon: Copy, run: () => setDialog({ kind: "copy", ids: list.map((i) => i.id) }) },
+      canWrite && { key: "dup", label: "Dupliquer", icon: CopyPlus, run: () => void duplicate(list.map((i) => i.id)) },
+      { key: "clip", label: "Copier", icon: Copy, kbd: "Ctrl C", run: () => setClipboard({ ids: list.map((i) => i.id), mode: "copy" }) },
+      canWrite && { key: "cut", label: "Couper", icon: Scissors, kbd: "Ctrl X", run: () => setClipboard({ ids: list.map((i) => i.id), mode: "cut" }) },
+      { key: "star", label: list.every((i) => i.starred) ? "Retirer des favoris" : "Ajouter aux favoris", icon: Star, run: () => toggleStar(list) },
+      canWrite && one?.type === "folder" && { key: "color", label: "Couleur du dossier", icon: FolderPlus, run: () => setDialog({ kind: "color", item: one }) },
+      canDelete && { key: "trash", label: "Mettre à la corbeille", icon: Trash2, danger: true, kbd: "Suppr", run: () => void trash(list.map((i) => i.id)) },
+    ];
   };
+  type Act = { key: string; label: string; icon: React.ComponentType<{ size?: number }>; run: () => void; danger?: boolean; kbd?: string };
+  const actions = (actionsFor(selItems).filter(Boolean) as Act[]);
+
+  const pct = (j: UploadJob) => (j.size ? Math.round((j.sent / j.size) * 100) : 100);
+  const activeUploads = uploads.filter((j) => j.status !== "done" || uploads.some((x) => x.status === "uploading"));
 
   return (
     <div
-      style={{
-        display: "flex",
-        gap: "18px",
-        minHeight: "calc(100vh - 120px)",
-        position: "relative",
+      className="dDrive"
+      onDragEnter={(e) => {
+        if (isExternal(e) && canWrite && !inTrash) setExternalDrag(true);
       }}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onClick={() => setMenu(null)}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        onChange={handleFileInputChange}
-        style={{ display: "none" }}
-      />
-
-      {/* Drag & drop overlay indicator */}
-      {isDraggingOver && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(6px)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            style={{
-              background: isDark ? "#1e293b" : "#ffffff",
-              padding: "36px 50px",
-              borderRadius: "20px",
-              textAlign: "center",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
-              border: "2px dashed var(--acc)",
-            }}
-          >
-            <UploadCloud size={48} style={{ color: "var(--acc)", margin: "0 auto 12px" }} />
-            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 4px", color: c.textHeading }}>
-              Déposez vos fichiers ici
-            </h3>
-            <p style={{ margin: 0, color: c.textMuted, fontSize: "13px" }}>
-              Importation directe dans {currentFolder ? `"${currentFolder.name}"` : "Mon Drive"}.
-            </p>
+      {/* -------------------------------------------- Colonne fixe */}
+      <aside className="dSide">
+        {canWrite && (
+          <div className="dNewWrap">
+            <button type="button" className="dNewBtn" onClick={(e) => { e.stopPropagation(); fileInput.current?.click(); }}>
+              <Upload size={16} /> Importer
+            </button>
+            <button type="button" className="dNewBtn ghost" onClick={() => setDialog({ kind: "folder" })} title="Nouveau dossier">
+              <FolderPlus size={16} />
+            </button>
           </div>
-        </div>
-      )}
-
-      {/* LEFT COLUMN: KNOWLEDGE BASE TREE (Directly from Image 2) */}
-      <aside
-        className="driveSidebar"
-        style={{
-          width: "260px",
-          flexShrink: 0,
-          background: c.surface,
-          borderRadius: "16px",
-          border: `1px solid ${c.border}`,
-          display: "flex",
-          flexDirection: "column",
-          padding: "16px 14px",
-          boxShadow: isDark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
-        }}
-      >
-        {/* En-tête : Documents + ajout */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 4px 12px",
-            borderBottom: `1px solid ${c.border}`,
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) enqueue(e.target.files, currentTarget);
+            e.target.value = "";
           }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <HardDrive size={16} style={{ color: isDark ? "#cbd5e1" : "#0f172a" }} />
-            <strong style={{ fontSize: "14px", fontWeight: 700, color: c.textHeading }}>
-              Documents
-            </strong>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setCreateFolderOpen(true)}
-            title="Créer un nouveau dossier"
-            style={{
-              width: "26px",
-              height: "26px",
-              borderRadius: "7px",
-              border: `1px solid ${c.borderInput}`,
-              background: c.inputBg,
-              color: c.textBody,
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-            }}
-          >
-            <Plus size={14} />
+        />
+        <nav className="dNav">
+          <button type="button" className={view === "folder" && !folderId ? "active" : ""} onClick={() => goFolder(null)} {...dropOn(null)}>
+            <HardDrive size={16} /> Mon Drive
           </button>
+          <button type="button" className={view === "recent" ? "active" : ""} onClick={() => { setQ(""); setView("recent"); }}>
+            <Clock3 size={16} /> Récents
+          </button>
+          <button type="button" className={view === "starred" ? "active" : ""} onClick={() => { setQ(""); setView("starred"); }}>
+            <Star size={16} /> Favoris
+          </button>
+          <button type="button" className={view === "trash" ? "active" : ""} onClick={() => { setQ(""); setView("trash"); }}>
+            <Trash2 size={16} /> Corbeille
+            {!!data?.stats.trashCount && <span className="dTreeCount">{data.stats.trashCount}</span>}
+          </button>
+        </nav>
+        <div className="dTreeTitle">Dossiers</div>
+        <div className="dTree">
+          {tree.length === 0 ? <p className="dMuted">Aucun dossier</p> : renderTree(null, 0)}
         </div>
-
-        {/* Tree Search */}
-        <div style={{ position: "relative", margin: "12px 0 10px" }}>
-          <Search
-            size={13}
-            style={{
-              position: "absolute",
-              left: "10px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: c.textMuted,
-            }}
-          />
-          <input
-            type="search"
-            placeholder="Rechercher un dossier…"
-            value={treeSearch}
-            onChange={(e) => setTreeSearch(e.target.value)}
-            style={{
-              width: "100%",
-              height: "32px",
-              paddingLeft: "30px",
-              paddingRight: "8px",
-              borderRadius: "8px",
-              border: `1px solid ${c.borderInput}`,
-              background: c.inputBg,
-              color: c.textHeading,
-              fontSize: "12px",
-              outline: "none",
-            }}
-          />
-        </div>
-
-        {/* Onglets : Dossiers / Favoris (Segmented button matching Image 2) */}
-        <div
-          style={{
-            display: "flex",
-            gap: "4px",
-            background: c.subtleBg,
-            padding: "3px",
-            borderRadius: "10px",
-            marginBottom: "14px",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setTreeTab("folders");
-              setFilterType("all");
-            }}
-            style={{
-              flex: 1,
-              height: "28px",
-              borderRadius: "7px",
-              border: "none",
-              fontSize: "12px",
-              fontWeight: 650,
-              background: treeTab === "folders" ? (isDark ? "#334155" : "#ffffff") : "transparent",
-              color: treeTab === "folders" ? c.textHeading : c.textMuted,
-              boxShadow: treeTab === "folders" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              cursor: "pointer",
-            }}
-          >
-            Dossiers
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTreeTab("starred");
-              setFilterType("starred");
-            }}
-            style={{
-              flex: 1,
-              height: "28px",
-              borderRadius: "7px",
-              border: "none",
-              fontSize: "12px",
-              fontWeight: 650,
-              background: treeTab === "starred" ? (isDark ? "#334155" : "#ffffff") : "transparent",
-              color: treeTab === "starred" ? c.textHeading : c.textMuted,
-              boxShadow: treeTab === "starred" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "4px",
-            }}
-          >
-            <Star size={11} fill={treeTab === "starred" ? "var(--acc)" : "none"} style={{ color: "var(--acc)" }} />
-            Favoris
-          </button>
-        </div>
-
-        {/* Tree List */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "2px",
-          }}
-        >
-          {/* Root button */}
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentFolderId(null);
-              setSearch("");
-            }}
-            style={{
-              padding: "7px 9px",
-              borderRadius: "8px",
-              border: "none",
-              background: currentFolderId === null && treeTab === "folders" ? c.activeTreeBg : "transparent",
-              color: currentFolderId === null && treeTab === "folders" ? (isDark ? "#ffffff" : "var(--acc)") : c.textBody,
-              fontSize: "12.5px",
-              fontWeight: currentFolderId === null && treeTab === "folders" ? 700 : 600,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              textAlign: "left",
-              cursor: "pointer",
-              transition: "all 0.12s ease",
-            }}
-          >
-            {currentFolderId === null ? (
-              <FolderOpen size={15} style={{ color: isDark ? "#ffffff" : "var(--acc)" }} />
-            ) : (
-              <Home size={15} style={{ color: isDark ? "#94a3b8" : "#64748b" }} />
-            )}
-            <span style={{ flex: 1 }}>Tous les documents</span>
-            <span
-              style={{
-                fontSize: "10.5px",
-                fontWeight: 700,
-                color: c.textMuted,
-                background: c.subtleBg,
-                padding: "1px 6px",
-                borderRadius: "10px",
-              }}
-            >
-              {stats.totalFolders}
-            </span>
-          </button>
-
-          {/* Subtree with connecting branch lines */}
-          {folderTree.length === 0 ? (
-            <div style={{ padding: "16px 8px", fontSize: "11.5px", color: c.textMuted, textAlign: "center" }}>
-              Aucun sous-dossier
+        {data && (
+          <div className="dStorage">
+            <div className="dStorageRow">
+              <span>Stockage utilisé</span>
+              <strong>{formatBytes(data.stats.bytes)}</strong>
             </div>
-          ) : (
-            <div style={{ marginTop: "4px" }}>
-              {buildTree(null)}
-            </div>
-          )}
-        </div>
-
-        {/* Compact Storage bar */}
-        <div
-          style={{
-            marginTop: "auto",
-            paddingTop: "12px",
-            borderTop: `1px solid ${c.border}`,
-            display: "flex",
-            flexDirection: "column",
-            gap: "6px",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: c.textMuted, fontWeight: 600 }}>
-            <span>Stockage Drive</span>
-            <strong>{formatBytes(stats.totalSizeBytes)}</strong>
+            <small>
+              {data.stats.files} fichier{data.stats.files > 1 ? "s" : ""} · {data.stats.folders} dossier
+              {data.stats.folders > 1 ? "s" : ""}
+              {data.stats.trashBytes > 0 && ` · corbeille ${formatBytes(data.stats.trashBytes)}`}
+            </small>
           </div>
-          <div
-            style={{
-              height: "4px",
-              background: c.subtleBg,
-              borderRadius: "4px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: Math.min(100, Math.max(4, stats.totalFiles * 6)) + "%",
-                background: "var(--acc)",
-                borderRadius: "4px",
-              }}
-            />
-          </div>
-          <span style={{ fontSize: "10.5px", color: c.textMuted }}>
-            {stats.totalFiles} fichier(s) · {stats.totalFolders} dossier(s)
-          </span>
-        </div>
+        )}
       </aside>
 
-      {/* RIGHT MAIN AREA: BREADCRUMB, LARGE FOLDER CARDS, FILES TABLE */}
-      <main
-        className="driveMainArea"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          background: c.surface,
-          borderRadius: "16px",
-          border: `1px solid ${c.border}`,
-          display: "flex",
-          flexDirection: "column",
-          padding: "18px 24px",
-          boxShadow: isDark ? "0 1px 3px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
-          overflowY: "auto",
-        }}
-      >
-        {/* COMPACT TOP TOOLBAR: Breadcrumb with ChevronDown + Actions */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px",
-            flexWrap: "wrap",
-            paddingBottom: "14px",
-            borderBottom: `1px solid ${c.border}`,
-          }}
-        >
-          {/* Breadcrumb path / Current Folder Title with ▾ */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setCurrentFolderId(null);
-                setSearch("");
-              }}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: c.textHeading,
-                fontSize: "17px",
-                fontWeight: 800,
-                padding: "2px 6px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <span>{currentFolder ? currentFolder.name : "Tous les documents"}</span>
-              <ChevronDown size={16} style={{ color: c.textMuted }} />
-            </button>
-
-            {breadcrumbs.length > 1 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "4px" }}>
-                <span style={{ color: c.textMuted, fontSize: "13px" }}>/</span>
-                <span style={{ fontSize: "12px", color: c.textMuted }}>
-                  {breadcrumbs[breadcrumbs.length - 1].name}
-                </span>
-              </div>
+      {/* -------------------------------------------- Zone fichiers */}
+      <section className="dMain" {...dropOn(currentTarget)}>
+        <header className="dHead">
+          <div className="dCrumbs">
+            {title ? (
+              <h2>{title}</h2>
+            ) : (
+              (data?.breadcrumbs ?? [{ id: null, name: "Mon Drive" }]).map((b, i, arr) => (
+                <React.Fragment key={b.id ?? "root"}>
+                  <button
+                    type="button"
+                    className={`dCrumb ${i === arr.length - 1 ? "current" : ""} ${dropTarget === (b.id ?? "root") ? "drop" : ""}`}
+                    onClick={() => goFolder(b.id)}
+                    {...dropOn(b.id)}
+                  >
+                    {b.name}
+                  </button>
+                  {i < arr.length - 1 && <ChevronRight size={15} className="dCrumbSep" />}
+                </React.Fragment>
+              ))
             )}
           </div>
-
-          {/* Action Tools: Search, Filter, Buttons */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            {/* Search Input */}
-            <div style={{ position: "relative", width: "180px" }}>
-              <Search
-                size={13}
-                style={{
-                  position: "absolute",
-                  left: "10px",
-                  top: "50%",
-                  transform: "translateY(-50)",
-                  color: c.textMuted,
-                }}
-              />
-              <input
-                type="search"
-                placeholder="Rechercher…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: "34px",
-                  paddingLeft: "30px",
-                  paddingRight: "8px",
-                  borderRadius: "9px",
-                  border: `1px solid ${c.borderInput}`,
-                  background: c.inputBg,
-                  color: c.textHeading,
-                  fontSize: "12px",
-                  outline: "none",
-                }}
-              />
-            </div>
-
-            {/* Filter by Type */}
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={{
-                height: "34px",
-                padding: "0 10px",
-                borderRadius: "9px",
-                border: `1px solid ${c.borderInput}`,
-                background: c.inputBg,
-                fontSize: "12px",
-                color: c.textBody,
-                fontWeight: 600,
-                outline: "none",
-                cursor: "pointer",
-              }}
-            >
-              <option value="all">Tous les fichiers</option>
-              <option value="document">PDF & Word</option>
-              <option value="spreadsheet">Excel & Tableurs</option>
-              <option value="image">Images</option>
-              <option value="starred">Favoris ★</option>
-            </select>
-
-            {/* View Mode Toggle */}
-            <div
-              style={{
-                display: "flex",
-                background: c.subtleBg,
-                padding: "2px",
-                borderRadius: "8px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                title="Vue Liste"
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: viewMode === "list" ? (isDark ? "#334155" : "#ffffff") : "transparent",
-                  color: viewMode === "list" ? c.textHeading : c.textMuted,
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer",
-                  boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                <List size={14} />
+          <div className="dTools">
+            <label className="dSearch">
+              <Search size={15} />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher dans le Drive" />
+              {q && (
+                <button type="button" onClick={() => setQ("")} aria-label="Effacer">
+                  <X size={14} />
+                </button>
+              )}
+            </label>
+            <div className="dLayout" role="group" aria-label="Affichage">
+              <button type="button" className={layout === "list" ? "active" : ""} onClick={() => setLayout("list")} title="Liste">
+                <List size={15} />
               </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                title="Vue Grille"
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: viewMode === "grid" ? (isDark ? "#334155" : "#ffffff") : "transparent",
-                  color: viewMode === "grid" ? c.textHeading : c.textMuted,
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer",
-                  boxShadow: viewMode === "grid" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                <Grid size={14} />
+              <button type="button" className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} title="Grille">
+                <LayoutGrid size={15} />
               </button>
             </div>
+          </div>
+        </header>
 
-            {/* New Folder Button */}
-            <button
-              type="button"
-              onClick={() => setCreateFolderOpen(true)}
-              style={{
-                height: "34px",
-                padding: "0 12px",
-                borderRadius: "9px",
-                border: `1px solid ${c.borderInput}`,
-                background: c.inputBg,
-                color: c.textBody,
-                fontSize: "12px",
-                fontWeight: 650,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                cursor: "pointer",
-              }}
-            >
-              <FolderPlus size={14} style={{ color: "var(--acc)" }} />
-              <span>Nouveau dossier</span>
-            </button>
+        {!inTrash && (
+          <div className="dKinds">
+            {KINDS.map((k) => (
+              <button key={k.id} type="button" className={kind === k.id ? "active" : ""} onClick={() => setKind(k.id)}>
+                {k.label}
+              </button>
+            ))}
+            {clipboard && canWrite && view === "folder" && (
+              <button type="button" className="dPaste" onClick={paste}>
+                <ClipboardPaste size={14} /> Coller {clipboard.ids.length} élément{clipboard.ids.length > 1 ? "s" : ""}
+              </button>
+            )}
+          </div>
+        )}
 
-            {/* Upload Files Button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              style={{
-                height: "34px",
-                padding: "0 14px",
-                borderRadius: "9px",
-                border: "none",
-                background: "var(--acc)",
-                color: "#ffffff",
-                fontSize: "12px",
-                fontWeight: 650,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                cursor: "pointer",
-                boxShadow: "0 2px 6px rgba(37,99,235,0.3)",
-              }}
-            >
-              <UploadCloud size={14} />
-              <span>{uploading ? uploadProgressMsg || "Importation…" : "Importer"}</span>
-            </button>
+        {inTrash && (
+          <div className="dTrashBar">
+            <span>
+              Les éléments sont supprimés définitivement après {data?.limits.trashRetentionDays ?? 30} jours.
+            </span>
+            {canDelete && !!items.length && (
+              <button
+                type="button"
+                className="btnSecondary"
+                onClick={() => {
+                  if (window.confirm("Vider la corbeille ? Tous ses éléments seront supprimés définitivement."))
+                    void run(() => api("drive2/empty-trash", {}), "Corbeille vidée.");
+                }}
+              >
+                <Trash2 size={14} /> Vider la corbeille
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Barre d'actions de la sélection */}
+        <div className={`dSelBar ${selected.size ? "show" : ""}`}>
+          <button type="button" className="dSelClose" onClick={() => setSelected(new Set())} aria-label="Désélectionner">
+            <X size={15} />
+          </button>
+          <strong>
+            {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
+          </strong>
+          <div className="dSelActions">
+            {actions.map((a) => (
+              <button key={a.key} type="button" className={a.danger ? "danger" : ""} onClick={a.run} title={a.kbd ? `${a.label} (${a.kbd})` : a.label}>
+                <a.icon size={15} />
+                <span>{a.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         {error && (
-          <div
-            style={{
-              margin: "12px 0 0",
-              background: "#fee2e2",
-              border: "1px solid #fca5a5",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              fontSize: "12.5px",
-              color: "#991b1b",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
+          <div className="calendarAlert errorAlert">
+            <AlertCircle size={16} />
             <span>{error}</span>
-            <button
-              onClick={() => setError("")}
-              style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", fontWeight: 700 }}
-            >
-              ×
-            </button>
+            <button onClick={() => setError("")}>×</button>
           </div>
         )}
 
-        {/* MAIN BODY: FOLDERS (Big grey cards) + FILES TABLE */}
-        <div style={{ marginTop: "16px", flex: 1 }}>
-          {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center" }}>
-              <RefreshCw size={22} className="animate-spin" style={{ color: "var(--acc)", margin: "0 auto 8px" }} />
-              <p style={{ color: "#64748b", fontSize: "13px", fontWeight: 600 }}>Chargement…</p>
+        {/* Défilement indépendant */}
+        <div
+          className={`dScroll ${dropTarget === (currentTarget ?? "root") ? "drop" : ""}`}
+          onClick={() => setSelected(new Set())}
+          onContextMenu={(e) => {
+            if ((e.target as HTMLElement).closest(".dItem")) return;
+            e.preventDefault();
+          }}
+        >
+          {loading && !data ? (
+            <div className="dEmpty">
+              <Loader2 size={22} className="spin" /> Chargement…
             </div>
           ) : items.length === 0 ? (
-            <div
-              style={{
-                padding: "48px 20px",
-                textAlign: "center",
-                border: `2px dashed ${isDark ? "#334155" : "#e2e8f0"}`,
-                borderRadius: "14px",
-                background: isDark ? "#111827" : "rgba(255, 255, 255, 0.35)",
-                marginTop: "10px",
-              }}
-            >
-              <FolderOpen size={40} style={{ color: isDark ? "#475569" : "#cbd5e1", margin: "0 auto 12px" }} />
-              <h4 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: c.textHeading }}>
-                {search || filterType !== "all" ? "Aucun élément correspondant" : "Ce dossier est vide"}
-              </h4>
-              <p style={{ margin: "0 0 16px", fontSize: "12.5px", color: c.textMuted }}>
-                {search || filterType !== "all"
-                  ? "Ajustez vos filtres de recherche."
-                  : "Glissez-déposez des fichiers ici ou utilisez les boutons ci-dessus pour ajouter des documents."}
-              </p>
-              <div style={{ display: "inline-flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setCreateFolderOpen(true)}
-                  style={{
-                    height: "32px",
-                    padding: "0 12px",
-                    borderRadius: "8px",
-                    border: `1px solid ${c.borderInput}`,
-                    background: c.inputBg,
-                    color: c.textBody,
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                  }}
-                >
-                  <FolderPlus size={13} />
-                  Créer un sous-dossier
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    height: "32px",
-                    padding: "0 12px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "var(--acc)",
-                    color: "#ffffff",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                  }}
-                >
-                  <UploadCloud size={13} />
-                  Importer un fichier
-                </button>
+            <div className="dEmpty">
+              <FolderIcon size={56} />
+              <strong>{inTrash ? "La corbeille est vide" : q ? "Aucun résultat" : "Ce dossier est vide"}</strong>
+              {!inTrash && !q && canWrite && (
+                <>
+                  <span>Glissez-déposez des fichiers ici, de n&apos;importe quel type et de n&apos;importe quelle taille.</span>
+                  <div className="dEmptyActions">
+                    <button type="button" className="btnSecondary" onClick={(e) => { e.stopPropagation(); setDialog({ kind: "folder" }); }}>
+                      <FolderPlus size={15} /> Nouveau dossier
+                    </button>
+                    <button type="button" className="btnPrimary" onClick={(e) => { e.stopPropagation(); fileInput.current?.click(); }}>
+                      <Upload size={15} /> Importer des fichiers
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : layout === "list" ? (
+            <div className="dTable" role="grid">
+              <div className="dRow dRowHead" role="row">
+                <span className="dCheck">
+                  <input
+                    type="checkbox"
+                    aria-label="Tout sélectionner"
+                    checked={selected.size > 0 && selected.size === items.length}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(items.map((i) => i.id)) : new Set())}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </span>
+                <span>Nom</span>
+                <span>{inTrash ? "Supprimé le" : "Modifié le"}</span>
+                <span>Taille</span>
+                <span />
               </div>
+              {items.map((it) => (
+                <div
+                  key={it.id}
+                  role="row"
+                  className={`dRow dItem ${selected.has(it.id) ? "sel" : ""} ${dropTarget === it.id ? "drop" : ""} ${clipboard?.mode === "cut" && clipboard.ids.includes(it.id) ? "cut" : ""}`}
+                  draggable={canWrite && !inTrash}
+                  onDragStart={(e) => onItemDragStart(e, it)}
+                  onClick={(e) => clickItem(e, it)}
+                  onDoubleClick={() => open(it)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!selected.has(it.id)) setSelected(new Set([it.id]));
+                    setMenu({ x: e.clientX, y: e.clientY });
+                  }}
+                  {...(it.type === "folder" ? dropOn(it.id) : {})}
+                >
+                  <span className="dCheck">
+                    <input type="checkbox" checked={selected.has(it.id)} onChange={() => toggleCheck(it)} onClick={(e) => e.stopPropagation()} aria-label={`Sélectionner ${it.name}`} />
+                  </span>
+                  <span className="dName">
+                    {it.type === "folder" ? <FolderIcon color={it.color} size={26} /> : <FileTypeIcon name={it.name} mime={it.mimeType} size={22} />}
+                    <span className="dNameText">{it.name}</span>
+                    {it.starred && <Star size={13} className="dStar" />}
+                  </span>
+                  <span className="dMeta">{fmtDate(inTrash && it.trashedAt ? it.trashedAt : it.updatedAt)}</span>
+                  <span className="dMeta">{it.type === "folder" ? `${it.childCount} élément${it.childCount > 1 ? "s" : ""}` : formatBytes(it.size)}</span>
+                  <span className="dRowAct">
+                    <button
+                      type="button"
+                      aria-label="Actions"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!selected.has(it.id)) setSelected(new Set([it.id]));
+                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setMenu({ x: r.left - 200, y: r.bottom + 4 });
+                      }}
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </span>
+                </div>
+              ))}
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-              {/* SECTION: FOLDERS (Big grey cards matching Image 2) */}
-              {folders.length > 0 && (
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: 800,
-                      color: c.textHeading,
-                      margin: "0 0 14px",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    Dossiers
-                  </h3>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                      gap: "16px",
-                    }}
-                  >
-                    {folders.map((folder) => {
-                      return (
-                        <div
-                          key={folder.id}
-                          className="driveFolderCard"
-                          onClick={() => {
-                            setCurrentFolderId(folder.id);
-                            setSearch("");
-                          }}
-                          style={{
-                            background: c.cardBg,
-                            border: `1px solid ${c.border}`,
-                            borderRadius: "18px",
-                            padding: "16px",
-                            cursor: "pointer",
-                            transition: "all 0.18s ease",
-                            position: "relative",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            boxShadow: isDark ? "0 2px 5px rgba(0,0,0,0.25)" : "0 2px 6px rgba(0,0,0,0.03)",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = c.hoverBg;
-                            e.currentTarget.style.borderColor = isDark ? "#475569" : "#cbd5e1";
-                            e.currentTarget.style.boxShadow = isDark
-                              ? "0 8px 20px rgba(0,0,0,0.4)"
-                              : "0 8px 20px rgba(15,23,42,0.08)";
-                            e.currentTarget.style.transform = "translateY(-2px)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = c.cardBg;
-                            e.currentTarget.style.borderColor = c.border;
-                            e.currentTarget.style.boxShadow = isDark ? "0 2px 5px rgba(0,0,0,0.25)" : "0 2px 6px rgba(0,0,0,0.03)";
-                            e.currentTarget.style.transform = "translateY(0)";
-                          }}
-                        >
-                          {/* Top options overlay */}
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: "10px",
-                              right: "10px",
-                              display: "flex",
-                              gap: "2px",
-                              zIndex: 10,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleStar(folder, e)}
-                              title={folder.starred ? "Retirer des favoris" : "Ajouter aux favoris"}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                color: folder.starred ? "var(--acc)" : (isDark ? "#475569" : "#cbd5e1"),
-                                cursor: "pointer",
-                                padding: "2px",
-                              }}
-                            >
-                              <Star size={13} fill={folder.starred ? "var(--acc)" : "none"} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuId(activeMenuId === folder.id ? null : folder.id);
-                              }}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                color: c.textMuted,
-                                cursor: "pointer",
-                                padding: "2px",
-                              }}
-                            >
-                              <MoreVertical size={14} />
-                            </button>
-                          </div>
-
-                          {/* Big Stylized Grey Folder Graphic with papers peeking out */}
-                          <BigFolderGraphic isDark={isDark} color={folder.color} />
-
-                          {/* Name & Count directly below graphic */}
-                          <div style={{ textAlign: "center", marginTop: "4px" }}>
-                            <strong
-                              style={{
-                                display: "block",
-                                fontSize: "14px",
-                                color: c.textHeading,
-                                fontWeight: 700,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={folder.name}
-                            >
-                              {folder.name}
-                            </strong>
-                            <span style={{ fontSize: "11.5px", color: c.textMuted, marginTop: "2px", display: "block" }}>
-                              {folder.childCount ?? 0} Files
-                            </span>
-                          </div>
-
-                          {/* Context menu */}
-                          {activeMenuId === folder.id && (
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                position: "absolute",
-                                top: "34px",
-                                right: "8px",
-                                background: c.surface,
-                                border: `1px solid ${c.border}`,
-                                borderRadius: "10px",
-                                boxShadow: isDark ? "0 8px 20px rgba(0,0,0,0.5)" : "0 8px 20px rgba(0,0,0,0.12)",
-                                zIndex: 60,
-                                minWidth: "150px",
-                                padding: "4px",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCurrentFolderId(folder.id);
-                                  setActiveMenuId(null);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  fontSize: "12px",
-                                  background: "transparent",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  color: c.textBody,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <FolderOpen size={13} />
-                                Ouvrir
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRenameItem(folder);
-                                  setRenameValue(folder.name);
-                                  setActiveMenuId(null);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  fontSize: "12px",
-                                  background: "transparent",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  color: c.textBody,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Edit3 size={13} />
-                                Renommer
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMoveItem(folder);
-                                  setMoveTargetParentId(folder.parentId);
-                                  setActiveMenuId(null);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  fontSize: "12px",
-                                  background: "transparent",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  color: c.textBody,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Move size={13} />
-                                Déplacer vers…
-                              </button>
-                              <div style={{ height: "1px", background: c.border, margin: "3px 0" }} />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleDelete(folder);
-                                  setActiveMenuId(null);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  fontSize: "12px",
-                                  background: "transparent",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  color: "#dc2626",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Trash2 size={13} />
-                                Supprimer
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+            <div className="dGrid">
+              {items.map((it) => (
+                <div
+                  key={it.id}
+                  className={`dCard dItem ${selected.has(it.id) ? "sel" : ""} ${dropTarget === it.id ? "drop" : ""} ${clipboard?.mode === "cut" && clipboard.ids.includes(it.id) ? "cut" : ""}`}
+                  draggable={canWrite && !inTrash}
+                  onDragStart={(e) => onItemDragStart(e, it)}
+                  onClick={(e) => clickItem(e, it)}
+                  onDoubleClick={() => open(it)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!selected.has(it.id)) setSelected(new Set([it.id]));
+                    setMenu({ x: e.clientX, y: e.clientY });
+                  }}
+                  {...(it.type === "folder" ? dropOn(it.id) : {})}
+                >
+                  <input
+                    type="checkbox"
+                    className="dCardCheck"
+                    checked={selected.has(it.id)}
+                    onChange={() => toggleCheck(it)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Sélectionner ${it.name}`}
+                  />
+                  <div className="dThumb">
+                    {it.type === "folder" ? (
+                      <FolderIcon color={it.color} size={64} />
+                    ) : fileTypeInfo(it.name, it.mimeType).glyph === "image" && it.url && !/svg|heic|tif/i.test(it.name) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`${it.url}?inline=1`} alt="" loading="lazy" />
+                    ) : (
+                      <FileTypeIcon name={it.name} mime={it.mimeType} size={52} />
+                    )}
                   </div>
+                  <div className="dCardName">
+                    {it.starred && <Star size={12} className="dStar" />}
+                    <span>{it.name}</span>
+                  </div>
+                  <small className="dMeta">{it.type === "folder" ? `${it.childCount} élément(s)` : formatBytes(it.size)}</small>
                 </div>
-              )}
-
-              {/* SECTION: FILES (Clean table matching Image 2 with Name, Added By, Date, Size) */}
-              {files.length > 0 && (
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: 800,
-                      color: c.textHeading,
-                      margin: "0 0 14px",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    Files
-                  </h3>
-
-                  {viewMode === "list" ? (
-                    <div
-                      style={{
-                        background: c.surface,
-                        border: `1px solid ${c.border}`,
-                        borderRadius: "14px",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {/* Header row */}
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "36px 3fr 2.2fr 1.3fr 1fr 80px",
-                          alignItems: "center",
-                          padding: "10px 16px",
-                          background: c.cardBg,
-                          borderBottom: `1px solid ${c.border}`,
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          color: c.textMuted,
-                          letterSpacing: "0.02em",
-                        }}
-                      >
-                        <div style={{ display: "grid", placeItems: "center" }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.size > 0 && selectedIds.size === files.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedIds(new Set(files.map((f) => f.id)));
-                              } else {
-                                setSelectedIds(new Set());
-                              }
-                            }}
-                            style={{ cursor: "pointer", accentColor: "var(--acc)" }}
-                          />
-                        </div>
-                        <span>Name</span>
-                        <span>Added By</span>
-                        <span>Date added</span>
-                        <span>Size</span>
-                        <span style={{ textAlign: "right" }}>Actions</span>
-                      </div>
-
-                      {/* File rows */}
-                      {files.map((file) => {
-                        const meta = getFileMeta(file);
-                        const creator = file.creatorName || "Administrateur";
-                        const creatorEmail = file.creatorEmail || `${creator.toLowerCase().replace(/\s+/g, "")}@gopermis.fr`;
-                        const creatorInitial = creator.slice(0, 1).toUpperCase();
-                        const isSelected = selectedIds.has(file.id);
-
-                        return (
-                          <div
-                            key={file.id}
-                            className="driveFileRow"
-                            onClick={() => setPreviewItem(file)}
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "36px 3fr 2.2fr 1.3fr 1fr 80px",
-                              alignItems: "center",
-                              padding: "11px 16px",
-                              borderBottom: `1px solid ${c.border}`,
-                              fontSize: "12.5px",
-                              color: c.textBody,
-                              cursor: "pointer",
-                              transition: "background 0.12s ease",
-                              background: isSelected
-                                ? (isDark ? "rgba(37,99,235,0.12)" : "var(--acc-soft)")
-                                : "transparent",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isSelected) e.currentTarget.style.background = c.hoverBg;
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isSelected) e.currentTarget.style.background = "transparent";
-                            }}
-                          >
-                            {/* Checkbox */}
-                            <div
-                              style={{ display: "grid", placeItems: "center" }}
-                              onClick={(e) => toggleSelect(file.id, e)}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {}}
-                                style={{ cursor: "pointer", accentColor: "var(--acc)" }}
-                              />
-                            </div>
-
-                            {/* File Name + Dog-eared Document Sheet Icon */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-                              {(() => {
-                                const IconComponent = meta.icon;
-                                return (
-                                  <div
-                                    style={{
-                                      width: "28px",
-                                      height: "28px",
-                                      borderRadius: "7px",
-                                      background: isDark ? "#1e293b" : "#f1f5f9",
-                                      color: isDark ? "#cbd5e1" : "#475569",
-                                      display: "grid",
-                                      placeItems: "center",
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    <IconComponent size={15} />
-                                  </div>
-                                );
-                              })()}
-
-                              <span
-                                style={{
-                                  fontWeight: 650,
-                                  color: c.textHeading,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={file.name}
-                              >
-                                {file.name}
-                              </span>
-                            </div>
-
-                            {/* Added by / User Avatar + Email (Image 2 style) */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                              <div
-                                style={{
-                                  width: "22px",
-                                  height: "22px",
-                                  borderRadius: "50%",
-                                  background: "var(--acc)",
-                                  color: "#ffffff",
-                                  fontWeight: 800,
-                                  fontSize: "9.5px",
-                                  display: "grid",
-                                  placeItems: "center",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {creatorInitial}
-                              </div>
-                              <span
-                                style={{
-                                  fontSize: "12px",
-                                  color: c.textBody,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {creatorEmail}
-                              </span>
-                            </div>
-
-                            {/* Date Added */}
-                            <span style={{ color: c.textMuted, fontSize: "12px" }}>
-                              {formatDate(file.createdAt)}
-                            </span>
-
-                            {/* Size */}
-                            <span style={{ color: c.textMuted, fontSize: "12px" }}>
-                              {formatBytes(file.size)}
-                            </span>
-
-                            {/* Quick Actions */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                              <button
-                                type="button"
-                                onClick={(e) => handleDownload(file, e)}
-                                title="Télécharger"
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: c.textMuted,
-                                  cursor: "pointer",
-                                  padding: "4px",
-                                  borderRadius: "4px",
-                                }}
-                              >
-                                <Download size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => handleDelete(file, e)}
-                                title="Supprimer"
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "#dc2626",
-                                  cursor: "pointer",
-                                  padding: "4px",
-                                  borderRadius: "4px",
-                                }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    /* GRID VIEW FOR FILES */
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
-                        gap: "12px",
-                      }}
-                    >
-                      {files.map((file) => {
-                        const meta = getFileMeta(file);
-                        const IconComponent = meta.icon;
-                        const isImg = meta.type === "image" && file.data;
-
-                        return (
-                          <div
-                            key={file.id}
-                            onClick={() => setPreviewItem(file)}
-                            style={{
-                              background: c.cardBg,
-                              border: `1px solid ${c.border}`,
-                              borderRadius: "14px",
-                              padding: "12px",
-                              display: "flex",
-                              flexDirection: "column",
-                              justifyContent: "space-between",
-                              cursor: "pointer",
-                              transition: "all 0.15s ease",
-                              minHeight: "150px",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = "var(--acc)";
-                              e.currentTarget.style.boxShadow = "0 6px 14px rgba(0,0,0,0.06)";
-                              e.currentTarget.style.transform = "translateY(-1px)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = c.border;
-                              e.currentTarget.style.boxShadow = "none";
-                              e.currentTarget.style.transform = "translateY(0)";
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "72px",
-                                borderRadius: "10px",
-                                background: isImg ? (isDark ? "#1e293b" : "#f8fafc") : (isDark ? "#1e293b" : "#f1f5f9"),
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                overflow: "hidden",
-                                position: "relative",
-                              }}
-                            >
-                              {isImg ? (
-                                <img
-                                  src={file.data || ""}
-                                  alt={file.name}
-                                  style={{ width: "100%", height: "100%", objectFit: "contain", padding: "6px" }}
-                                />
-                              ) : (
-                                <IconComponent size={28} style={{ color: "var(--acc)" }} />
-                              )}
-                              <button
-                                type="button"
-                                onClick={(e) => handleToggleStar(file, e)}
-                                style={{
-                                  position: "absolute",
-                                  top: "4px",
-                                  right: "4px",
-                                  background: "rgba(255,255,255,0.85)",
-                                  border: "none",
-                                  borderRadius: "4px",
-                                  width: "22px",
-                                  height: "22px",
-                                  display: "grid",
-                                  placeItems: "center",
-                                  color: file.starred ? "var(--acc)" : "#94a3b8",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <Star size={11} fill={file.starred ? "var(--acc)" : "none"} />
-                              </button>
-                            </div>
-
-                            <div style={{ marginTop: "10px" }}>
-                              <strong
-                                style={{
-                                  display: "block",
-                                  fontSize: "12.5px",
-                                  color: c.textHeading,
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                                title={file.name}
-                              >
-                                {file.name}
-                              </strong>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  fontSize: "11px",
-                                  color: c.textMuted,
-                                  marginTop: "4px",
-                                }}
-                              >
-                                <span>{formatBytes(file.size)}</span>
-                                <span>{file.creatorName?.split(" ")[0] || "Admin"}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+              ))}
             </div>
           )}
         </div>
-      </main>
 
-      {/* MODAL: NOUVEAU DOSSIER */}
-      {createFolderOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 1000,
-            display: "grid",
-            placeItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setCreateFolderOpen(false)}
-        >
+        {externalDrag && (
           <div
-            className="driveModal"
-            style={{
-              width: "100%",
-              maxWidth: "420px",
-              padding: "22px",
-              background: c.surface,
-              border: `1px solid ${c.border}`,
-              borderRadius: "18px",
-              boxShadow: isDark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
+            className="dDropOverlay"
+            {...dropOn(currentTarget)}
+            onDragLeave={(e) => {
+              if (e.currentTarget === e.target) setExternalDrag(false);
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FolderPlus size={18} style={{ color: "var(--acc)" }} />
-                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: c.textHeading }}>
-                  Nouveau dossier
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCreateFolderOpen(false)}
-                style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateFolder} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: c.textBody }}>
-                Nom du dossier
-                <input
-                  type="text"
-                  autoFocus
-                  required
-                  placeholder="ex: Contrats & Factures"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  style={{
-                    height: "38px",
-                    padding: "0 12px",
-                    borderRadius: "9px",
-                    border: `1px solid ${c.borderInput}`,
-                    background: c.inputBg,
-                    color: c.textHeading,
-                    fontSize: "13px",
-                    outline: "none",
-                  }}
-                />
-              </label>
-
-              <div>
-                <span style={{ display: "block", fontSize: "12.5px", fontWeight: 600, color: c.textBody, marginBottom: "8px" }}>
-                  Couleur du dossier
-                </span>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {FOLDER_COLORS.map((fc) => (
-                    <button
-                      key={fc.value}
-                      type="button"
-                      onClick={() => setNewFolderColor(fc.value)}
-                      title={fc.label}
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "50%",
-                        background: fc.value,
-                        border: newFolderColor === fc.value ? "2.5px solid var(--acc)" : (isDark ? "2px solid #1e293b" : "2px solid #ffffff"),
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                        cursor: "pointer",
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setCreateFolderOpen(false)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "8px",
-                    border: `1px solid ${c.border}`,
-                    background: c.subtleBg,
-                    color: c.textBody,
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "6px 16px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "var(--acc)",
-                    color: "#ffffff",
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Créer
-                </button>
-              </div>
-            </form>
+            <Upload size={34} />
+            <strong>Déposez pour importer</strong>
+            <span>dans « {data?.breadcrumbs?.at(-1)?.name ?? "Mon Drive"} »</span>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
-      {/* MODAL: RENOMMER */}
-      {renameItem && (
+      {/* -------------------------------------------- Menu contextuel */}
+      {menu && actions.length > 0 && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 1000,
-            display: "grid",
-            placeItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setRenameItem(null)}
+          className="dMenu"
+          style={{ left: Math.min(menu.x, window.innerWidth - 240), top: Math.min(menu.y, window.innerHeight - actions.length * 38 - 20) }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className="driveModal"
-            style={{
-              width: "100%",
-              maxWidth: "420px",
-              padding: "22px",
-              background: c.surface,
-              border: `1px solid ${c.border}`,
-              borderRadius: "18px",
-              boxShadow: isDark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: c.textHeading }}>
-                Renommer
-              </h3>
-              <button
-                type="button"
-                onClick={() => setRenameItem(null)}
-                style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleRename} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: c.textBody }}>
-                Nouveau nom
-                <input
-                  type="text"
-                  autoFocus
-                  required
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  style={{
-                    height: "38px",
-                    padding: "0 12px",
-                    borderRadius: "9px",
-                    border: `1px solid ${c.borderInput}`,
-                    background: c.inputBg,
-                    color: c.textHeading,
-                    fontSize: "13px",
-                    outline: "none",
-                  }}
-                />
-              </label>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setRenameItem(null)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "8px",
-                    border: `1px solid ${c.border}`,
-                    background: c.subtleBg,
-                    color: c.textBody,
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "6px 16px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "var(--acc)",
-                    color: "#ffffff",
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Enregistrer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: DÉPLACER VERS... */}
-      {moveItem && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 1000,
-            display: "grid",
-            placeItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setMoveItem(null)}
-        >
-          <div
-            className="driveModal"
-            style={{
-              width: "100%",
-              maxWidth: "460px",
-              padding: "22px",
-              background: c.surface,
-              border: `1px solid ${c.border}`,
-              borderRadius: "18px",
-              boxShadow: isDark ? "0 20px 40px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.2)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Move size={17} style={{ color: "var(--acc)" }} />
-                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: c.textHeading }}>
-                  Déplacer &quot;{moveItem.name}&quot;
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMoveItem(null)}
-                style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleMove} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <span style={{ fontSize: "12px", color: c.textMuted }}>
-                Sélectionnez le dossier de destination :
-              </span>
-
-              <div
-                style={{
-                  maxHeight: "220px",
-                  overflowY: "auto",
-                  border: `1px solid ${c.border}`,
-                  borderRadius: "10px",
-                  padding: "6px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "3px",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setMoveTargetParentId(null)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "7px",
-                    border: "1px solid",
-                    borderColor: moveTargetParentId === null ? "var(--acc)" : "transparent",
-                    background: moveTargetParentId === null ? (isDark ? "rgba(37,99,235,0.2)" : "var(--acc-soft)") : "transparent",
-                    textAlign: "left",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    cursor: "pointer",
-                    fontSize: "12.5px",
-                    fontWeight: 650,
-                    color: moveTargetParentId === null ? "var(--acc)" : c.textBody,
-                  }}
-                >
-                  <Home size={14} />
-                  <span>Mon Drive (Racine)</span>
-                  {moveTargetParentId === null && <Check size={14} style={{ marginLeft: "auto" }} />}
-                </button>
-
-                {folderTree
-                  .filter((f) => f.id !== moveItem.id)
-                  .map((f) => {
-                    const isSelected = moveTargetParentId === f.id;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => setMoveTargetParentId(f.id)}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: "7px",
-                          border: "1px solid",
-                          borderColor: isSelected ? "var(--acc)" : "transparent",
-                          background: isSelected ? (isDark ? "rgba(37,99,235,0.2)" : "var(--acc-soft)") : "transparent",
-                          textAlign: "left",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          cursor: "pointer",
-                          fontSize: "12.5px",
-                          fontWeight: 650,
-                          color: isSelected ? "var(--acc)" : c.textBody,
-                        }}
-                      >
-                        <Folder size={14} style={{ color: f.color || "#64748b" }} />
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {f.name}
-                        </span>
-                        {isSelected && <Check size={14} style={{ marginLeft: "auto" }} />}
-                      </button>
-                    );
-                  })}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setMoveItem(null)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "8px",
-                    border: `1px solid ${c.border}`,
-                    background: c.subtleBg,
-                    color: c.textBody,
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "6px 16px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "var(--acc)",
-                    color: "#ffffff",
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Déplacer ici
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: APERÇU FICHIER */}
-      {previewItem && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.75)",
-            backdropFilter: "blur(6px)",
-            zIndex: 1000,
-            display: "grid",
-            placeItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setPreviewItem(null)}
-        >
-          <div
-            className="driveModal"
-            style={{
-              width: "100%",
-              maxWidth: "680px",
-              maxHeight: "86vh",
-              overflowY: "auto",
-              padding: "22px",
-              background: c.surface,
-              border: `1px solid ${c.border}`,
-              borderRadius: "20px",
-              boxShadow: isDark ? "0 25px 50px rgba(0,0,0,0.5)" : "0 25px 50px rgba(0,0,0,0.25)",
-              display: "flex",
-              flexDirection: "column",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-                {(() => {
-                  const meta = getFileMeta(previewItem);
-                  const Icon = meta.icon;
-                  return (
-                    <div
-                      style={{
-                        width: "34px",
-                        height: "34px",
-                        borderRadius: "8px",
-                        background: meta.bg,
-                        color: meta.color,
-                        display: "grid",
-                        placeItems: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Icon size={18} />
-                    </div>
-                  );
-                })()}
-                <div style={{ minWidth: 0 }}>
-                  <h3
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: 700,
-                      margin: "0 0 2px",
-                      color: c.textHeading,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {previewItem.name}
-                  </h3>
-                  <span style={{ fontSize: "11.5px", color: c.textMuted }}>
-                    {formatBytes(previewItem.size)} · Ajouté par {previewItem.creatorName || "Administrateur"} le {formatDate(previewItem.createdAt)}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <button
-                  type="button"
-                  onClick={() => handleDownload(previewItem)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "8px",
-                    border: `1px solid ${c.border}`,
-                    background: c.subtleBg,
-                    color: c.textBody,
-                    fontSize: "12px",
-                    fontWeight: 650,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    cursor: "pointer",
-                  }}
-                >
-                  <Download size={13} />
-                  Télécharger
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewItem(null)}
-                  style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: "4px" }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: c.cardBg,
-                border: `1px solid ${c.border}`,
-                borderRadius: "14px",
-                padding: "20px",
-                display: "grid",
-                placeItems: "center",
-                minHeight: "260px",
-                overflow: "hidden",
+          {actions.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              className={a.danger ? "danger" : ""}
+              onClick={() => {
+                setMenu(null);
+                a.run();
               }}
             >
-              {(() => {
-                const meta = getFileMeta(previewItem);
-                if (meta.type === "image" && previewItem.data) {
-                  return (
-                    <img
-                      src={previewItem.data}
-                      alt={previewItem.name}
-                      style={{
-                        maxWidth: "100%",
-                        maxHeight: "420px",
-                        objectFit: "contain",
-                        borderRadius: "8px",
-                      }}
-                    />
-                  );
-                }
+              <a.icon size={15} />
+              <span>{a.label}</span>
+              {a.kbd && <kbd>{a.kbd}</kbd>}
+            </button>
+          ))}
+        </div>
+      )}
 
-                if (meta.type === "pdf" && previewItem.data?.startsWith("data:application/pdf")) {
-                  return (
-                    <iframe
-                      src={previewItem.data}
-                      title={previewItem.name}
-                      style={{
-                        width: "100%",
-                        height: "440px",
-                        border: "none",
-                        borderRadius: "8px",
-                      }}
-                    />
-                  );
-                }
-
-                return (
-                  <div style={{ textAlign: "center", padding: "20px" }}>
-                    <div
-                      style={{
-                        width: "58px",
-                        height: "58px",
-                        borderRadius: "16px",
-                        background: meta.bg,
-                        color: meta.color,
-                        display: "grid",
-                        placeItems: "center",
-                        margin: "0 auto 12px",
-                      }}
-                    >
-                      <meta.icon size={30} />
-                    </div>
-                    <h4 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: c.textHeading }}>
-                      Document {meta.label}
-                    </h4>
-                    <p style={{ margin: "0 0 16px", fontSize: "12.5px", color: c.textMuted }}>
-                      Taille : {formatBytes(previewItem.size)}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleDownload(previewItem)}
-                      style={{
-                        padding: "8px 16px",
-                        borderRadius: "9px",
-                        border: "none",
-                        background: "var(--acc)",
-                        color: "#ffffff",
-                        fontSize: "12.5px",
-                        fontWeight: 650,
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <Download size={14} />
-                      Télécharger ce fichier
-                    </button>
+      {/* -------------------------------------------- Envois en cours */}
+      {uploads.length > 0 && (
+        <div className="dUploads">
+          <div className="dUploadsHead">
+            <strong>
+              {uploads.some((j) => j.status === "uploading" || j.status === "queued")
+                ? `Import de ${uploads.filter((j) => j.status === "uploading" || j.status === "queued").length} fichier(s)…`
+                : "Imports terminés"}
+            </strong>
+            <button type="button" onClick={() => setUploads((u) => u.filter((j) => j.status === "uploading" || j.status === "queued"))} aria-label="Fermer">
+              <X size={15} />
+            </button>
+          </div>
+          <div className="dUploadsList">
+            {activeUploads.map((j) => (
+              <div key={j.key} className={`dUpload ${j.status}`}>
+                <FileTypeIcon name={j.name} size={18} />
+                <div className="dUploadMain">
+                  <span className="dUploadName">{j.name}</span>
+                  <div className="dBar">
+                    <span style={{ width: `${pct(j)}%` }} />
                   </div>
-                );
-              })()}
-            </div>
+                  <small>
+                    {j.status === "error"
+                      ? j.error
+                      : j.status === "cancelled"
+                        ? "Annulé"
+                        : j.status === "done"
+                          ? formatBytes(j.size)
+                          : `${formatBytes(j.sent)} / ${formatBytes(j.size)}`}
+                  </small>
+                </div>
+                {j.status === "done" ? (
+                  <CheckCircle2 size={16} className="ok" />
+                ) : j.status === "uploading" || j.status === "queued" ? (
+                  <button type="button" onClick={() => cancelled.current.add(j.key)} aria-label="Annuler">
+                    <X size={14} />
+                  </button>
+                ) : (
+                  <AlertCircle size={16} className="ko" />
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
+
+      {toast && <div className="dToast">{toast}</div>}
+
+      {/* -------------------------------------------- Fenêtres */}
+      {dialog?.kind === "folder" && (
+        <NameDialog
+          title="Nouveau dossier"
+          initial="Nouveau dossier"
+          submit="Créer"
+          onClose={() => setDialog(null)}
+          onSubmit={(name) => run(() => api("drive2/folder", { name, parentId: currentTarget }), "Dossier créé.")}
+        />
+      )}
+      {dialog?.kind === "rename" && (
+        <NameDialog
+          title="Renommer"
+          initial={dialog.item.name}
+          submit="Renommer"
+          selectBase={dialog.item.type === "file"}
+          onClose={() => setDialog(null)}
+          onSubmit={(name) => run(() => api("drive2/update", { ids: [dialog.item.id], name }), "Renommé.")}
+        />
+      )}
+      {(dialog?.kind === "move" || dialog?.kind === "copy") && (
+        <FolderPicker
+          title={dialog.kind === "move" ? "Déplacer vers" : "Copier vers"}
+          tree={tree}
+          exclude={dialog.ids}
+          onClose={() => setDialog(null)}
+          onPick={(target) =>
+            run(
+              () => api(dialog.kind === "move" ? "drive2/move" : "drive2/copy", { ids: dialog.ids, parentId: target, keepName: true }),
+              dialog.kind === "move" ? "Éléments déplacés." : "Éléments copiés.",
+            )
+          }
+        />
+      )}
+      {dialog?.kind === "color" && (
+        <Modal title="Couleur du dossier" close={() => setDialog(null)}>
+          <div className="dColors">
+            {FOLDER_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={dialog.item.color === c ? "active" : ""}
+                onClick={() => {
+                  setDialog(null);
+                  void run(() => api("drive2/update", { ids: [dialog.item.id], color: c }));
+                }}
+                aria-label={c}
+              >
+                <FolderIcon color={c} size={40} />
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+      {preview && <Preview item={preview} onClose={() => setPreview(null)} onDownload={() => download([preview])} />}
     </div>
   );
 }
+
+/* --------------------------------------------------------------- Fenêtres */
+
+function NameDialog({
+  title,
+  initial,
+  submit,
+  selectBase,
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  initial: string;
+  submit: string;
+  selectBase?: boolean;
+  onClose: () => void;
+  onSubmit: (name: string) => Promise<boolean>;
+}) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      const dot = initial.lastIndexOf(".");
+      el.setSelectionRange(0, selectBase && dot > 0 ? dot : initial.length);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [initial, selectBase]);
+  return (
+    <Modal title={title} close={onClose}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await onSubmit(value)) onClose();
+        }}
+      >
+        <label>
+          Nom
+          <input ref={ref} value={value} onChange={(e) => setValue(e.target.value)} maxLength={255} required />
+        </label>
+        <div className="modalButtonsRow">
+          <button type="button" className="btnSecondary" onClick={onClose}>
+            Annuler
+          </button>
+          <button type="submit" className="btnPrimary">
+            {submit}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function FolderPicker({
+  title,
+  tree,
+  exclude,
+  onClose,
+  onPick,
+}: {
+  title: string;
+  tree: TreeNode[];
+  exclude: string[];
+  onClose: () => void;
+  onPick: (id: string | null) => Promise<boolean>;
+}) {
+  const [target, setTarget] = useState<string | null>(null);
+  const blocked = useMemo(() => {
+    const out = new Set(exclude);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const n of tree)
+        if (n.parentId && out.has(n.parentId) && !out.has(n.id)) {
+          out.add(n.id);
+          grew = true;
+        }
+    }
+    return out;
+  }, [tree, exclude]);
+  const render = (pid: string | null, depth: number): React.ReactNode =>
+    tree
+      .filter((n) => n.parentId === pid && !blocked.has(n.id))
+      .map((n) => (
+        <div key={n.id}>
+          <button type="button" className={`dPick ${target === n.id ? "active" : ""}`} style={{ paddingLeft: 12 + depth * 16 }} onClick={() => setTarget(n.id)}>
+            <FolderIcon color={n.color} size={18} /> {n.name}
+          </button>
+          {render(n.id, depth + 1)}
+        </div>
+      ));
+  return (
+    <Modal title={title} close={onClose}>
+      <div className="dPickList">
+        <button type="button" className={`dPick ${target === null ? "active" : ""}`} onClick={() => setTarget(null)}>
+          <HardDrive size={16} /> Mon Drive
+        </button>
+        {render(null, 1)}
+      </div>
+      <div className="modalButtonsRow">
+        <button type="button" className="btnSecondary" onClick={onClose}>
+          Annuler
+        </button>
+        <button
+          type="button"
+          className="btnPrimary"
+          onClick={async () => {
+            if (await onPick(target)) onClose();
+          }}
+        >
+          Valider
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => void; onDownload: () => void }) {
+  const t = fileTypeInfo(item.name, item.mimeType);
+  const src = `${item.url}?inline=1`;
+  const mime = item.mimeType || "";
+  let body: React.ReactNode;
+  if (t.glyph === "image" && !/svg|heic|tif/i.test(t.ext)) {
+    // eslint-disable-next-line @next/next/no-img-element
+    body = <img src={src} alt={item.name} className="dPreviewMedia" />;
+  } else if (t.glyph === "video" || mime.startsWith("video/")) {
+    body = <video src={src} controls autoPlay className="dPreviewMedia" />;
+  } else if (t.glyph === "audio" || mime.startsWith("audio/")) {
+    body = <audio src={src} controls autoPlay />;
+  } else if (t.ext === "pdf") {
+    body = <iframe src={src} title={item.name} className="dPreviewFrame" />;
+  } else {
+    body = (
+      <div className="dPreviewNone">
+        <FileTypeIcon name={item.name} mime={item.mimeType} size={72} />
+        <p>Aperçu non disponible pour ce type de fichier.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="dPreview" onClick={onClose} role="dialog" aria-modal="true" aria-label={`Aperçu de ${item.name}`}>
+      <div className="dPreviewBar" onClick={(e) => e.stopPropagation()}>
+        <FileTypeIcon name={item.name} mime={item.mimeType} size={22} />
+        <strong>{item.name}</strong>
+        <small>{formatBytes(item.size)}</small>
+        <button type="button" className="btnSecondary" onClick={onDownload}>
+          <Download size={15} /> Télécharger
+        </button>
+        <button type="button" className="dPreviewClose" onClick={onClose} aria-label="Fermer">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="dPreviewBody" onClick={(e) => e.stopPropagation()}>
+        {body}
+      </div>
+    </div>
+  );
+}
+

@@ -1,3 +1,4 @@
+import * as drive2 from "../../../server/drive-v2";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { authenticationStatus, loginAccount, registerAccount, logoutAccount, changePassword } from "../../../server/authentication";
@@ -370,6 +371,64 @@ async function handle(
     ) {
       const u = await requireUser("sessions.complete");
       return NextResponse.json(await completeBooking(path[1], u.id));
+    }
+    // ---- Drive complet (MySQL) ----
+    if (path[0] === "drive2") {
+      if (!isMysqlMode()) throw new HttpError(501, "Drive complet disponible avec la base MySQL.");
+      const sub = path.slice(1).join("/");
+      if (sub === "list" && !isPost) {
+        await requireUser("drive.read");
+        const sp = new URL(req.url).searchParams;
+        return NextResponse.json(
+          await drive2.listDrive({
+            view: sp.get("view") ?? undefined,
+            parentId: sp.get("parentId"),
+            q: sp.get("q") ?? undefined,
+            kind: sp.get("kind") ?? undefined,
+          }),
+        );
+      }
+      if (path[1] === "file" && path.length === 3 && !isPost) {
+        await requireUser("drive.read");
+        const inline = new URL(req.url).searchParams.get("inline") === "1";
+        const res = await drive2.streamFile(path[2], req.headers.get("range"), inline);
+        return new NextResponse(res.body, { status: res.status, headers: res.headers });
+      }
+      if (sub === "upload/chunk" && isPost) {
+        const u = await requireUser("drive.write");
+        const sp = new URL(req.url).searchParams;
+        return NextResponse.json(
+          await drive2.appendChunk(sp.get("id") ?? "", Number(sp.get("offset") ?? -1), await req.arrayBuffer(), u.id),
+        );
+      }
+      if (isPost) {
+        const deleteOps = ["trash", "purge", "empty-trash", "restore"];
+        const u = await requireUser(deleteOps.includes(sub) ? "drive.delete" : "drive.write");
+        const body = sub === "empty-trash" ? {} : await json(256000);
+        switch (sub) {
+          case "folder":
+            return NextResponse.json(await drive2.createFolder2(body, u.id), { status: 201 });
+          case "upload/start":
+            return NextResponse.json(await drive2.startUpload(body, u.id));
+          case "upload/finish":
+            return NextResponse.json(await drive2.finishUpload(body, u.id), { status: 201 });
+          case "update":
+            return NextResponse.json(await drive2.updateItem(body));
+          case "move":
+            return NextResponse.json(await drive2.moveItems(body));
+          case "copy":
+            return NextResponse.json(await drive2.copyItems(body, u.id), { status: 201 });
+          case "trash":
+            return NextResponse.json(await drive2.trashItems(body));
+          case "restore":
+            return NextResponse.json(await drive2.restoreItems(body));
+          case "purge":
+            return NextResponse.json(await drive2.purgeItems(body));
+          case "empty-trash":
+            return NextResponse.json(await drive2.emptyTrash());
+        }
+      }
+      throw new HttpError(404, "Route introuvable");
     }
     if (route === "drive/items" && !isPost) {
       await requireUser("drive.read");

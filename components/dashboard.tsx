@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type { Booking, ClientRecord, Resources, User, HomeStats } from "../lib/api-types";
 
-import { NotificationBell } from "./notification-bell";
 import { DashboardHero, Sparkline, dailyCounts } from "./dashboard-hero";
 import { CommandPaletteTrigger } from "./command-palette";
 
@@ -124,7 +123,6 @@ export function Dashboard({
             <CalendarDays size={16} />
             <span>Planifier</span>
           </button>
-          <NotificationBell />
         </div>
       </div>
 

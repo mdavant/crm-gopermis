@@ -81,6 +81,8 @@ const KINDS = [
   { id: "audio", label: "Audio" },
   { id: "archive", label: "Archives" },
 ];
+/** Actions affichées en icône seule, épinglées à droite de la barre de sélection. */
+const PINNED = ["dl", "trash", "purge"];
 const FOLDER_COLORS = ["#e5484d", "#e8833a", "#d4a72c", "#12a594", "#3e7bfa", "#8e4ec6", "#d6409f", "#64748b"];
 
 export function formatBytes(n: number) {
@@ -676,12 +678,31 @@ export function DriveView() {
             {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
           </strong>
           <div className="dSelActions">
-            {actions.map((a) => (
-              <button key={a.key} type="button" className={a.danger ? "danger" : ""} onClick={a.run} title={a.kbd ? `${a.label} (${a.kbd})` : a.label}>
-                <a.icon size={15} />
-                <span>{a.label}</span>
-              </button>
-            ))}
+            {actions
+              .filter((a) => !PINNED.includes(a.key))
+              .map((a) => (
+                <button key={a.key} type="button" className={a.danger ? "danger" : ""} onClick={a.run} title={a.kbd ? `${a.label} (${a.kbd})` : a.label}>
+                  <a.icon size={15} />
+                  <span>{a.label}</span>
+                </button>
+              ))}
+          </div>
+          {/* Télécharger et supprimer : icônes seules, toujours visibles à droite */}
+          <div className="dSelPinned">
+            {actions
+              .filter((a) => PINNED.includes(a.key))
+              .map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  className={a.danger ? "danger" : ""}
+                  onClick={a.run}
+                  title={a.kbd ? `${a.label} (${a.kbd})` : a.label}
+                  aria-label={a.label}
+                >
+                  <a.icon size={17} />
+                </button>
+              ))}
           </div>
         </div>
 

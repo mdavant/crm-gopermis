@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS instructors (
   email VARCHAR(254) NULL,
   phone VARCHAR(30) NULL,
   status VARCHAR(40) NOT NULL DEFAULT 'active',
+  color VARCHAR(16) NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
   created_by CHAR(36) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -195,7 +196,9 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE TABLE IF NOT EXISTS scheduling_policy (
   id TINYINT(1) NOT NULL PRIMARY KEY,
-  credit_policy ENUM('reserve_credit', 'credit_on_completion') NOT NULL
+  credit_policy ENUM('reserve_credit', 'credit_on_completion') NOT NULL,
+  companion_color VARCHAR(16) NULL,
+  exam_color VARCHAR(16) NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS bookings (

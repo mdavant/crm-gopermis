@@ -61,6 +61,8 @@ export function IntervalFields() {
   );
 }
 
+const INSTRUCTOR_FALLBACK_COLORS = ["#e5484d", "#8e4ec6", "#12a594", "#3e7bfa", "#d6409f", "#e8833a", "#65a30d"];
+
 // Heure affichée dans la grille (08:00, 09:00…)
 function formatHourAMPM(hour: number): string {
   return `${hour.toString().padStart(2, "0")}:00`;
@@ -258,23 +260,45 @@ export function Schedule({
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
   // Visual color palette for real bookings
-  const cardColorStyles = [
-    { bg: "color-mix(in oklab, var(--acc) 16%, rgba(255,255,255,.55))", border: "var(--acc)", text: "var(--acc-ink)", subtext: "var(--acc-ink)", avatarBg: "var(--acc)", avatarText: "#ffffff" },
-    { bg: "rgba(209, 250, 229, 0.6)", border: "#34d399", text: "#14532d", subtext: "#166534", avatarBg: "#34d399", avatarText: "#ffffff" },
-    { bg: "rgba(254, 243, 199, 0.65)", border: "#f59e0b", text: "#78350f", subtext: "#92400e", avatarBg: "#f59e0b", avatarText: "#ffffff" },
-    { bg: "rgba(237, 233, 254, 0.65)", border: "#8b5cf6", text: "#3b0764", subtext: "#5b21b6", avatarBg: "#8b5cf6", avatarText: "#ffffff" },
-  ];
 
-  // Couleur d'une séance selon le type de véhicule (cf. légende « Ressources »)
+  // Couleur d'une séance : examen pratique, sinon couleur du moniteur GoPermis,
+  // sinon (pas de moniteur) couleur « accompagnateur personnel ».
+  const planningColors = resources?.planningColors ?? { companion: "#0ea5e9", exam: "#f59e0b" };
+  const instructorColor = (id: string | null) => {
+    if (!id || !resources) return null;
+    const list = resources.instructors;
+    const i = list.findIndex((x) => x.id === id);
+    if (i < 0) return null;
+    return list[i].color || INSTRUCTOR_FALLBACK_COLORS[i % INSTRUCTOR_FALLBACK_COLORS.length];
+  };
+  const colorFor = (b: Booking) =>
+    b.service_type === "exam"
+      ? planningColors.exam
+      : b.instructor_id
+        ? instructorColor(b.instructor_id) || b.instructor_color || "#e5484d"
+        : planningColors.companion;
   const paletteFor = (b: Booking) => {
-    const label = (b.vehicle_label || "").toLowerCase();
-    if (label.includes("rs3") || label.includes("audi")) return cardColorStyles[3];
-    if (label.includes("auto")) return cardColorStyles[1];
-    return cardColorStyles[0];
+    const c = colorFor(b);
+    return {
+      bg: `color-mix(in oklab, ${c} 18%, rgba(255,255,255,.6))`,
+      border: c,
+      text: `color-mix(in oklab, ${c} 62%, #1c1210)`,
+      subtext: `color-mix(in oklab, ${c} 55%, #3b2a26)`,
+      avatarBg: c,
+      avatarText: "#ffffff",
+    };
   };
 
-  // Real bookings only! No fabricated dummy sessions!
-  const activeBookings = activeFilters ? rows.filter(b => activeFilters.includes(b.status)) : rows;
+  // Filtre « un seul moniteur / un seul véhicule »
+  const [focus, setFocus] = useState("all");
+  const matchesFocus = (b: Booking) =>
+    focus === "all" ||
+    (focus.startsWith("i:") && b.instructor_id === focus.slice(2)) ||
+    (focus.startsWith("v:") && b.vehicle_id === focus.slice(2)) ||
+    (focus === "companion" && !b.instructor_id && b.service_type !== "exam") ||
+    (focus === "exam" && b.service_type === "exam");
+
+  const activeBookings = (activeFilters ? rows.filter((b) => activeFilters.includes(b.status)) : rows).filter(matchesFocus);
 
   // Month and year display
   const monthName = currentDate.toLocaleString("fr-FR", { month: "long" });
@@ -403,6 +427,40 @@ export function Schedule({
               <span>Google Calendar non connecté</span>
             </button>
 
+            {/* Afficher : tout le planning, un moniteur ou un véhicule */}
+            <label className="planFocus">
+              <span>Afficher</span>
+              <select value={focus} onChange={(e) => setFocus(e.target.value)} aria-label="Filtrer le planning">
+                <option value="all">Tout le planning</option>
+                {resources && resources.instructors.some((i) => i.active) && (
+                  <optgroup label="Moniteur GoPermis">
+                    {resources.instructors
+                      .filter((i) => i.active)
+                      .map((i) => (
+                        <option key={i.id} value={"i:" + i.id}>
+                          {i.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {resources && resources.vehicles.some((v) => v.active) && (
+                  <optgroup label="Véhicule">
+                    {resources.vehicles
+                      .filter((v) => v.active)
+                      .map((v) => (
+                        <option key={v.id} value={"v:" + v.id}>
+                          {v.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                <optgroup label="Type de séance">
+                  <option value="companion">Accompagnateur personnel</option>
+                  <option value="exam">Examens pratiques</option>
+                </optgroup>
+              </select>
+            </label>
+
             {/* View Switcher: Day, Week, Month */}
             <div className="viewSwitcherPill">
               <button
@@ -449,6 +507,37 @@ export function Schedule({
           </div>
         </div>
       </div>
+
+      {resources && (
+        <div className="planLegend" aria-label="Légende des couleurs">
+          {resources.instructors
+            .filter((i) => i.active)
+            .map((i) => (
+              <button
+                key={i.id}
+                type="button"
+                className={focus === "i:" + i.id ? "active" : ""}
+                onClick={() => setFocus(focus === "i:" + i.id ? "all" : "i:" + i.id)}
+              >
+                <span className="planDot" style={{ background: instructorColor(i.id) ?? undefined }} />
+                {i.name}
+              </button>
+            ))}
+          <button type="button" className={focus === "companion" ? "active" : ""} onClick={() => setFocus(focus === "companion" ? "all" : "companion")}>
+            <span className="planDot" style={{ background: planningColors.companion }} />
+            Accompagnateur personnel
+          </button>
+          <button type="button" className={focus === "exam" ? "active" : ""} onClick={() => setFocus(focus === "exam" ? "all" : "exam")}>
+            <span className="planDot" style={{ background: planningColors.exam }} />
+            Examen pratique
+          </button>
+          {focus !== "all" && (
+            <button type="button" className="planLegendReset" onClick={() => setFocus("all")}>
+              Tout afficher
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="calendarAlert errorAlert">
@@ -622,16 +711,17 @@ export function Schedule({
                         <span>Créneau libre · Cliquez pour planifier</span>
                       </div>
                     ) : (
-                      slotBookings.map((b, idx) => {
-                        const palette = cardColorStyles[idx % cardColorStyles.length];
+                      slotBookings.map((b) => {
+                        const palette = paletteFor(b);
                         return (
                           <div
                             key={b.id}
                             className="eventCard dayEventCard"
                             style={{
-                              backgroundColor: palette.bg,
+                              background: palette.bg,
                               borderColor: palette.border,
                               color: palette.text,
+                              ["--ev" as string]: palette.border,
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -699,7 +789,7 @@ export function Schedule({
 
                   <div className="monthCellBookings">
                     {dayBookings.slice(0, 3).map((b) => (
-                      <div key={b.id} className="monthBookingChip">
+                      <div key={b.id} className="monthBookingChip" style={{ borderLeftColor: colorFor(b) }}>
                         {b.first_name} ({new Date(b.starts_at).getHours()}h)
                       </div>
                     ))}

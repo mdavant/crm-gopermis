@@ -5,6 +5,31 @@ import { IntervalFields, localInstant, displayDate } from "./schedule";
 import { Car, UserCheck, Plus, Edit2, Archive, CheckCircle2, AlertCircle } from "lucide-react";
 import { Modal } from "./modal";
 
+export const PLAN_SWATCHES = ["#e5484d", "#8e4ec6", "#12a594", "#3e7bfa", "#d6409f", "#e8833a", "#65a30d", "#0ea5e9", "#f59e0b", "#64748b"];
+
+function ColorPicker({ value, onChange, disabled }: { value: string; onChange: (c: string) => void; disabled?: boolean }) {
+  return (
+    <div className="colorPicker" role="radiogroup">
+      {PLAN_SWATCHES.map((c) => (
+        <button
+          key={c}
+          type="button"
+          role="radio"
+          aria-checked={value.toLowerCase() === c}
+          aria-label={c}
+          disabled={disabled}
+          className={value.toLowerCase() === c ? "active" : ""}
+          style={{ background: c }}
+          onClick={() => onChange(c)}
+        />
+      ))}
+      <label className="colorCustom" title="Couleur personnalisée">
+        <input type="color" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+      </label>
+    </div>
+  );
+}
+
 /** « Clio manuelle — Personnel 25 €/h · GoPermis 35 €/h » */
 function modelOptionLabel(cat: Catalog, m: { id: string; label: string }) {
   const rates = cat.rates
@@ -27,7 +52,8 @@ export function ResourceSettings({
 
   // Edit Modals
   const [editingVehicle, setEditingVehicle] = useState<{ id: string; label: string; model_id: string; active: boolean } | null>(null);
-  const [editingInstructor, setEditingInstructor] = useState<{ id: string; name: string; active: boolean } | null>(null);
+  const [editingInstructor, setEditingInstructor] = useState<{ id: string; name: string; active: boolean; color: string } | null>(null);
+  const [colors, setColors] = useState<{ companion: string; exam: string } | null>(null);
   const [newVehicleModal, setNewVehicleModal] = useState(false);
   const [newInstructorModal, setNewInstructorModal] = useState(false);
 
@@ -223,7 +249,11 @@ export function ResourceSettings({
               ) : (
                 data.instructors.map((i) => (
                   <div key={i.id} className="resourceCompactItem">
-                    <div className="resourceItemIcon user">
+                    <div
+                      className="resourceItemIcon user"
+                      style={{ background: i.color || PLAN_SWATCHES[data.instructors.indexOf(i) % PLAN_SWATCHES.length], color: "#fff" }}
+                      title="Couleur dans le planning"
+                    >
                       <UserCheck size={18} />
                     </div>
                     <div className="resourceItemMeta">
@@ -242,6 +272,7 @@ export function ResourceSettings({
                               id: i.id,
                               name: i.name,
                               active: i.active,
+                              color: i.color || PLAN_SWATCHES[data.instructors.indexOf(i) % PLAN_SWATCHES.length],
                             })
                           }
                         >
@@ -275,6 +306,51 @@ export function ResourceSettings({
                 ))
               )}
             </div>
+          </div>
+
+          {/* Couleurs du planning */}
+          <div className="resourceSectionCard fullWidthCard planColorsCard">
+            <div className="sectionCardHeader">
+              <h3 className="sectionCardTitle">Couleurs du planning</h3>
+              <span className="subHeadingHint">
+                Chaque moniteur a sa couleur (bouton modifier). Réglez ici les séances sans moniteur GoPermis.
+              </span>
+            </div>
+            <div className="planColorsGrid">
+              {(["companion", "exam"] as const).map((k) => {
+                const current = colors ?? data.planningColors ?? { companion: "#0ea5e9", exam: "#f59e0b" };
+                return (
+                  <div key={k} className="planColorItem">
+                    <strong>{k === "companion" ? "Accompagnateur personnel" : "Examen pratique"}</strong>
+                    <small>
+                      {k === "companion"
+                        ? "Séances supervisées par un proche de l'élève, sans moniteur GoPermis."
+                        : "Passages d'examen, sans accompagnateur GoPermis."}
+                    </small>
+                    <ColorPicker
+                      value={current[k]}
+                      disabled={!can("resources.write")}
+                      onChange={(c) => setColors({ ...current, [k]: c })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {colors && can("resources.write") && (
+              <div className="modalButtonsRow">
+                <button type="button" className="btnSecondary" onClick={() => setColors(null)}>
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btnPrimary"
+                  disabled={busy}
+                  onClick={() => void save(() => api("planning/colors", colors), "Couleurs du planning enregistrées.").then(() => setColors(null))}
+                >
+                  Enregistrer les couleurs
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 3. Indisponibilités explicites */}
@@ -471,6 +547,7 @@ export function ResourceSettings({
                     id: editingInstructor.id,
                     name: editingInstructor.name,
                     active: editingInstructor.active,
+                    color: editingInstructor.color,
                   }),
                 "Moniteur mis à jour avec succès."
               );
@@ -488,6 +565,9 @@ export function ResourceSettings({
                 maxLength={150}
               />
             </label>
+
+            <span className="formLabel">Couleur dans le planning</span>
+            <ColorPicker value={editingInstructor.color} onChange={(c) => setEditingInstructor({ ...editingInstructor, color: c })} />
 
             <label className="checkboxInline">
               <input

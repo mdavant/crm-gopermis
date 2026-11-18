@@ -36,6 +36,7 @@ import {
   createResource,
   archiveResource,
   updateResource,
+  updatePlanningColors,
   createBlock,
   releaseBlock,
   listBookings,
@@ -315,6 +316,10 @@ async function handle(
     if (route === "resources/archive" && isPost) {
       const u = await requireUser("resources.write");
       return NextResponse.json(await archiveResource(await json(), u.id));
+    }
+    if (route === "planning/colors" && isPost) {
+      const u = await requireUser("resources.write");
+      return NextResponse.json(await updatePlanningColors(await json(), u.id));
     }
     if (route === "resources/update" && isPost) {
       const u = await requireUser("resources.write");

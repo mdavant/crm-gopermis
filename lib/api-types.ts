@@ -138,7 +138,10 @@ export type Booking = {
   status: "confirmed" | "completed";
   minutes: number;
   vehicle_label: string;
+  vehicle_model?: string;
   instructor_name: string | null;
+  instructor_color?: string | null;
+  service_type?: string | null;
   first_name: string;
   last_name: string;
   companion_name: string | null;
@@ -152,7 +155,8 @@ export type Resources = {
     model_label: string;
     active: boolean;
   }[];
-  instructors: { id: string; name: string; active: boolean }[];
+  instructors: { id: string; name: string; active: boolean; color?: string | null }[];
+  planningColors?: { companion: string; exam: string };
   blocks: {
     id: string;
     reason: string;

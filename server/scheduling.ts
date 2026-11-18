@@ -132,6 +132,25 @@ async function mysqlCheckOverlap(
   }
 }
 
+export const DEFAULT_COMPANION_COLOR = "#0ea5e9";
+export const DEFAULT_EXAM_COLOR = "#f59e0b";
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Couleur invalide");
+
+/** Couleurs générales du planning (accompagnateur personnel, examen pratique). */
+export async function updatePlanningColors(raw: unknown, actor: string) {
+  const x = z.object({ companion: hexColor, exam: hexColor }).parse(raw);
+  if (isMysqlMode()) {
+    await mysqlQuery("UPDATE scheduling_policy SET companion_color = ?, exam_color = ? WHERE id = 1", [x.companion, x.exam]);
+    await mysqlQuery(
+      `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, 'planning.colors', 'planning', 'colors', ?)`,
+      [randomUUID(), actor, JSON.stringify(x)],
+    );
+  } else {
+    await db().query("UPDATE scheduling_policy SET companion_color=$1, exam_color=$2 WHERE id=true", [x.companion, x.exam]);
+  }
+  return { ok: true };
+}
+
 export async function resources() {
   if (isMysqlMode()) {
     const [vehicles, instructors, blocks, policy] = await Promise.all([
@@ -148,13 +167,18 @@ export async function resources() {
          WHERE u.released_at IS NULL
          ORDER BY u.starts_at ASC`,
       ),
-      mysqlQuery("SELECT credit_policy FROM scheduling_policy WHERE id = 1"),
+      mysqlQuery("SELECT credit_policy, companion_color, exam_color FROM scheduling_policy WHERE id = 1"),
     ]);
+    const pol = (policy as Array<Record<string, unknown>>)[0] ?? {};
     return {
       vehicles,
       instructors,
       blocks,
-      creditPolicy: (policy as Array<{ credit_policy: string }>)[0]?.credit_policy ?? "credit_on_completion",
+      creditPolicy: String(pol.credit_policy ?? "credit_on_completion"),
+      planningColors: {
+        companion: (pol.companion_color as string) || DEFAULT_COMPANION_COLOR,
+        exam: (pol.exam_color as string) || DEFAULT_EXAM_COLOR,
+      },
     };
   }
 
@@ -166,13 +190,17 @@ export async function resources() {
     db().query(
       `SELECT u.*,o.vehicle_id,o.instructor_id,o.client_id,v.label AS vehicle_label,i.name AS instructor_name,concat(c.first_name,' ',c.last_name) AS client_name FROM unavailability u JOIN calendar_occupancy o ON o.unavailability_id=u.id LEFT JOIN vehicle v ON v.id=o.vehicle_id LEFT JOIN instructor i ON i.id=o.instructor_id LEFT JOIN client c ON c.id=o.client_id WHERE u.released_at IS NULL ORDER BY starts_at`,
     ),
-    db().query("SELECT credit_policy FROM scheduling_policy WHERE id=true"),
+    db().query("SELECT credit_policy, companion_color, exam_color FROM scheduling_policy WHERE id=true"),
   ]);
   return {
     vehicles: vehicles.rows,
     instructors: instructors.rows,
     blocks: blocks.rows,
     creditPolicy: policy.rows[0].credit_policy,
+    planningColors: {
+      companion: policy.rows[0].companion_color || DEFAULT_COMPANION_COLOR,
+      exam: policy.rows[0].exam_color || DEFAULT_EXAM_COLOR,
+    },
   };
 }
 
@@ -321,6 +349,7 @@ export async function updateResource(raw: unknown, actor: string) {
         id: z.uuid(),
         name: z.string().trim().min(1).max(150),
         active: z.boolean().optional(),
+        color: hexColor.nullable().optional(),
       }),
     ])
     .parse(raw);
@@ -361,6 +390,8 @@ export async function updateResource(raw: unknown, actor: string) {
               x.id,
             ],
           );
+          if (x.color !== undefined)
+            await conn.execute("UPDATE instructors SET color = ? WHERE id = ?", [x.color, x.id]);
         }
 
         await conn.execute(
@@ -405,12 +436,15 @@ export async function updateResource(raw: unknown, actor: string) {
           "UPDATE vehicle SET label=$1,model_id=COALESCE($2,model_id),active=COALESCE($3,active) WHERE id=$4",
           [x.label, x.modelId ?? null, x.active ?? null, x.id],
         );
-      } else
+      } else {
         await c.query("UPDATE instructor SET name=$1,active=COALESCE($2,active) WHERE id=$3", [
           x.name,
           x.active ?? null,
           x.id,
         ]);
+        if (x.color !== undefined)
+          await c.query("UPDATE instructor SET color=$1 WHERE id=$2", [x.color, x.id]);
+      }
       await audit(c, actor, "resource.updated", x.id, { kind: x.kind });
       return { ok: true };
     });
@@ -610,11 +644,12 @@ export async function listBookings(
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
     const rows = (await mysqlQuery(
       `SELECT b.*, b.start_at AS starts_at, b.end_at AS ends_at,
-              v.label AS vehicle_label, i.name AS instructor_name,
-              c.first_name, c.last_name
+              v.label AS vehicle_label, v.model_id AS vehicle_model, i.name AS instructor_name, i.color AS instructor_color,
+              c.first_name, c.last_name, s.type_id AS service_type
        FROM bookings b
        JOIN vehicles v ON v.id = b.vehicle_id
        LEFT JOIN instructors i ON i.id = b.instructor_id
+       LEFT JOIN services s ON s.id = b.service_id
        JOIN clients c ON c.id = b.client_id
        ${where}
        ORDER BY b.start_at ASC, b.id ASC
@@ -626,10 +661,11 @@ export async function listBookings(
 
   return (
     await db().query(
-      `SELECT b.*,v.label AS vehicle_label,i.name AS instructor_name,c.first_name,c.last_name 
+      `SELECT b.*,v.label AS vehicle_label,v.model_id AS vehicle_model,i.name AS instructor_name,i.color AS instructor_color,c.first_name,c.last_name,s.type_id AS service_type
        FROM booking b 
        JOIN vehicle v ON v.id=b.vehicle_id 
        LEFT JOIN instructor i ON i.id=b.instructor_id 
+       LEFT JOIN service s ON s.id=b.service_id
        JOIN client c ON c.id=b.client_id 
        WHERE ($1::uuid IS NULL OR b.client_id=$1) 
          AND ($2::date IS NULL OR (b.starts_at<(($2::date+1)::timestamp AT TIME ZONE 'Europe/Paris') AND b.ends_at>($2::date::timestamp AT TIME ZONE 'Europe/Paris')))

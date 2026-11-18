@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { db } from "./db";
 import { isMysqlMode, mysqlQuery } from "./mysql.mjs";
 import { HttpError } from "./errors.mjs";
+import { ALL_PERMISSIONS } from "../lib/permissions";
 
 export { HttpError };
 
@@ -16,6 +17,8 @@ export type AuthenticatedUser = {
   email: string;
   permissions: string[];
   roles: string[];
+  /** Mot de passe temporaire : doit être changé avant tout autre accès. */
+  mustChangePassword?: boolean;
 };
 
 export const digest = (token: string) =>
@@ -51,52 +54,47 @@ export async function clientIpAddress(request?: Request): Promise<string | null>
 
 function expandPermissionAliases(perms: Set<string>) {
   if (perms.has("admin.full")) {
-    for (const p of [
-      "admin.full",
-      "clients.read",
-      "clients.write",
-      "clients.view",
-      "clients.create",
-      "clients.edit",
-      "services.write",
-      "payments.read",
-      "payments.write",
-      "audit.read",
-      "schedule.read",
-      "schedule.write",
-      "planning.create",
-      "sessions.complete",
-      "resources.write",
-      "catalog.write",
-      "catalog.edit",
-      "drive.all",
-      "documents.read",
-      "documents.write",
-    ]) {
+    for (const p of ALL_PERMISSIONS) perms.add(p.key);
+    for (const p of ["clients.view", "clients.create", "clients.edit", "planning.create", "catalog.edit", "drive.all"])
       perms.add(p);
-    }
+    perms.delete("planning.own_only");
   }
+  // Anciens noms de permission (comptes créés avant le catalogue détaillé).
   if (perms.has("clients.view")) perms.add("clients.read");
-  if (perms.has("clients.edit") || perms.has("clients.create")) {
-    perms.add("clients.write");
-  }
+  if (perms.has("clients.edit") || perms.has("clients.create")) perms.add("clients.write");
   if (perms.has("planning.create")) {
     perms.add("schedule.read");
     perms.add("schedule.write");
   }
   if (perms.has("catalog.edit")) perms.add("catalog.write");
+  if (perms.has("drive.all")) for (const p of ["drive.read", "drive.write", "drive.delete"]) perms.add(p);
+  // Dépendances : un sous-accès implique son accès parent.
+  for (const p of ALL_PERMISSIONS)
+    if (perms.has(p.key)) for (const r of p.requires ?? []) perms.add(r);
 }
 
 export async function requireUser(
   permission?: string,
+  options: { allowPendingPassword?: boolean } = {},
 ): Promise<AuthenticatedUser> {
+  const user = await loadUser(permission);
+  if (user.mustChangePassword && !options.allowPendingPassword)
+    throw new HttpError(
+      403,
+      "Définissez votre nouveau mot de passe pour continuer.",
+      "PASSWORD_CHANGE_REQUIRED",
+    );
+  return user;
+}
+
+async function loadUser(permission?: string): Promise<AuthenticatedUser> {
   const token = await sessionToken();
   if (!token) throw new HttpError(401, "Connexion requise", "AUTH_REQUIRED");
   const tokenHash = digest(token);
 
   if (isMysqlMode()) {
     const userRows = (await mysqlQuery(
-      `SELECT u.id, u.first_name, u.last_name, u.name, u.email, u.role
+      `SELECT u.id, u.first_name, u.last_name, u.name, u.email, u.role, u.must_change_password
        FROM auth_sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP(3) AND u.is_active = 1
@@ -111,16 +109,17 @@ export async function requireUser(
     const role = String(u.role || "staff");
     const roles = role === "admin" ? ["admin", "technical_admin"] : [role];
 
+    // Les accès sont ceux cochés pour la personne dans le panel admin ;
+    // le rôle « admin » garde toujours l'accès complet.
     const permRows = (await mysqlQuery(
-      `SELECT permission_name FROM role_permissions WHERE role_name = ?
-       UNION
-       SELECT permission_name FROM user_permissions WHERE user_id = ?`,
-      [role, userId],
+      "SELECT permission_name FROM user_permissions WHERE user_id = ?",
+      [userId],
     )) as Record<string, unknown>[];
 
     const permSet = new Set<string>(
       permRows.map((r) => String(r.permission_name)),
     );
+    if (role === "admin") permSet.add("admin.full");
     expandPermissionAliases(permSet);
     const permissions = Array.from(permSet);
 
@@ -136,15 +135,16 @@ export async function requireUser(
       email: String(u.email),
       permissions,
       roles,
+      mustChangePassword: Boolean(Number(u.must_change_password)),
     };
   }
 
   const result = await db().query(
-    `SELECT u.id,u.name,u.email FROM auth_session s JOIN app_user u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`,
+    `SELECT u.id,u.name,u.email,COALESCE(u.must_change_password,false) AS "mustChangePassword" FROM auth_session s JOIN app_user u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`,
     [tokenHash],
   );
   const user = result.rows[0] as
-    | { id: string; name: string; email: string }
+    | { id: string; name: string; email: string; mustChangePassword: boolean }
     | undefined;
   if (!user) throw new HttpError(401, "Session expirée", "SESSION_EXPIRED");
 

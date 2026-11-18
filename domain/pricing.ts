@@ -11,7 +11,13 @@ export type Offer = {
   paidMinutes: number;
   bonusMinutes: number;
   singlePayment: boolean;
+  /** Modèles concernés ; vide ou absent = tous les modèles. */
+  modelIds?: string[];
 };
+
+export function offerAppliesTo(offer: Offer, model: string) {
+  return !offer.modelIds || offer.modelIds.length === 0 || offer.modelIds.includes(model);
+}
 export function quote(
   rates: Rate[],
   offers: Offer[],
@@ -44,6 +50,8 @@ export function quote(
     ? offers.find((o) => o.id === input.offerId)
     : undefined;
   if (input.offerId && !offer) throw new Error("Offre inconnue");
+  if (offer && !offerAppliesTo(offer, input.model))
+    throw new Error("Ce forfait ne s'applique pas à ce modèle de véhicule");
   if (offer && offer.paidMinutes !== input.minutes)
     throw new Error("Durée incompatible avec le forfait");
   return {

@@ -1,16 +1,21 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 export function Modal({
   title,
   close,
   children,
+  wide = false,
 }: {
   title: string;
   close: () => void;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   const panel = useRef<HTMLElement>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const oldOverflow = document.body.style.overflow;
@@ -20,13 +25,14 @@ export function Modal({
       document.body.style.overflow = oldOverflow;
       previous?.focus();
     };
-  }, []);
-  return (
+  }, [mounted]);
+  if (!mounted) return null;
+  return createPortal(
     <div className="modalBackdrop">
       <section
         ref={panel}
         tabIndex={-1}
-        className="modal card"
+        className={`modal card ${wide ? "modalWide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -65,6 +71,7 @@ export function Modal({
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

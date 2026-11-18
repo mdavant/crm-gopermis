@@ -32,6 +32,7 @@ import { DonneesView } from "../components/donnees-view";
 import { ThemeToggle } from "../components/theme-toggle";
 import { AuthGate } from "../components/auth-gate";
 import { AdminPanel } from "../components/admin-panel";
+import { ForcePasswordChange } from "../components/force-password";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { Plus, UserCircle2 } from "lucide-react";
 
@@ -65,6 +66,7 @@ export default function Home() {
   const refresh = useCallback(async () => {
     const u = await api<User>("me");
     setUser(u);
+    if (u.mustChangePassword) return;
     if (!u.permissions.includes("clients.read")) {
       setRows([]);
       setCat(null);
@@ -155,8 +157,20 @@ export default function Home() {
     );
   }
 
+  if (user.mustChangePassword) {
+    return (
+      <ForcePasswordChange
+        user={user}
+        onDone={(u) => {
+          setUser(u);
+          void refresh();
+        }}
+      />
+    );
+  }
   const isAdmin = Boolean(
     user.permissions?.includes("admin.full") ||
+    user.permissions?.includes("users.manage") ||
     user.permissions?.includes("technical_admin") ||
     user.roles?.includes("technical_admin") ||
     user.roles?.includes("admin")

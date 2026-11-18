@@ -77,7 +77,7 @@ export async function authenticationStatus() {
   }
   let user = null;
   try {
-    user = await requireUser();
+    user = await requireUser(undefined, { allowPendingPassword: true });
   } catch (e) {
     if (!(e instanceof HttpError && e.status === 401)) throw e;
   }
@@ -115,7 +115,7 @@ export async function loginAccount(raw: unknown, request: Request) {
       }
 
       const [userRows] = await conn.execute(
-        "SELECT id, password_hash, is_active FROM users WHERE LOWER(email) = ? LIMIT 1",
+        "SELECT id, password_hash, is_active, must_change_password FROM users WHERE LOWER(email) = ? LIMIT 1",
         [identifier],
       );
       const u = (userRows as Record<string, unknown>[])[0];
@@ -130,7 +130,7 @@ export async function loginAccount(raw: unknown, request: Request) {
       }
 
       await conn.execute("DELETE FROM login_attempts WHERE attempt_key = ?", [key]);
-      return { id: String(u.id) };
+      return { id: String(u.id), mustChangePassword: Boolean(Number(u.must_change_password)) };
     });
 
     if (result.error === 429) {
@@ -147,7 +147,7 @@ export async function loginAccount(raw: unknown, request: Request) {
         "INVALID_CREDENTIALS",
       );
     }
-    return establish(request, result.id);
+    return { ...(await establish(request, result.id)), mustChangePassword: result.mustChangePassword };
   }
 
   const userId = await transaction(async (c) => {
@@ -165,7 +165,7 @@ export async function loginAccount(raw: unknown, request: Request) {
     if (!expired && attempt.attempts >= 10) return { error: 429 };
     const u = (
       await c.query(
-        "SELECT id,password_hash,active FROM app_user WHERE lower(email)=$1",
+        "SELECT id,password_hash,active,COALESCE(must_change_password,false) AS must_change FROM app_user WHERE lower(email)=$1",
         [identifier],
       )
     ).rows[0];
@@ -177,7 +177,7 @@ export async function loginAccount(raw: unknown, request: Request) {
       return { error: 401 };
     }
     await c.query("DELETE FROM login_attempt WHERE key=$1", [key]);
-    return { id: u.id as string };
+    return { id: u.id as string, mustChangePassword: Boolean(u.must_change) };
   });
   if (userId.error === 429)
     throw new HttpError(
@@ -191,7 +191,7 @@ export async function loginAccount(raw: unknown, request: Request) {
       "Identifiant ou mot de passe incorrect.",
       "INVALID_CREDENTIALS",
     );
-  return establish(request, userId.id);
+  return { ...(await establish(request, userId.id)), mustChangePassword: Boolean(userId.mustChangePassword) };
 }
 
 export async function registerAccount(raw: unknown, request: Request) {
@@ -217,7 +217,7 @@ export async function logoutAccount() {
 }
 
 export async function changePassword(raw: unknown) {
-  const user = await requireUser();
+  const user = await requireUser(undefined, { allowPendingPassword: true });
   const x = z
     .object({
       currentPassword: z.string().min(1).max(256),
@@ -246,10 +246,10 @@ export async function changePassword(raw: unknown) {
           "INVALID_CURRENT_PASSWORD",
         );
       }
-      await conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", [
-        hashPassword(x.newPassword),
-        user.id,
-      ]);
+      await conn.execute(
+        "UPDATE users SET password_hash = ?, must_change_password = 0, temp_password = NULL WHERE id = ?",
+        [hashPassword(x.newPassword), user.id],
+      );
       await conn.execute("DELETE FROM auth_sessions WHERE user_id = ?", [user.id]);
       await conn.execute(
         `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, ip_address)
@@ -274,10 +274,10 @@ export async function changePassword(raw: unknown) {
         "Mot de passe actuel incorrect.",
         "INVALID_CURRENT_PASSWORD",
       );
-    await c.query("UPDATE app_user SET password_hash=$2 WHERE id=$1", [
-      user.id,
-      hashPassword(x.newPassword),
-    ]);
+    await c.query(
+      "UPDATE app_user SET password_hash=$2, must_change_password=false, temp_password=NULL WHERE id=$1",
+      [user.id, hashPassword(x.newPassword)],
+    );
     await c.query("DELETE FROM auth_session WHERE user_id=$1", [user.id]);
     await audit(c, user.id, "account.password_changed", user.id);
   });

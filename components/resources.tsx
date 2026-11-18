@@ -5,6 +5,14 @@ import { IntervalFields, localInstant, displayDate } from "./schedule";
 import { Car, UserCheck, Plus, Edit2, Archive, CheckCircle2, AlertCircle } from "lucide-react";
 import { Modal } from "./modal";
 
+/** « Clio manuelle — Personnel 25 €/h · GoPermis 35 €/h » */
+function modelOptionLabel(cat: Catalog, m: { id: string; label: string }) {
+  const rates = cat.rates
+    .filter((r) => r.model === m.id && !r.validTo)
+    .map((r) => `${r.support} ${(r.cents / 100).toLocaleString("fr-FR")} €/h`);
+  return rates.length ? `${m.label} — ${rates.join(" · ")}` : `${m.label} (aucun tarif)`;
+}
+
 export function ResourceSettings({
   can,
   cat,
@@ -127,6 +135,28 @@ export function ResourceSettings({
                       <strong>{v.label}</strong>
                       <span className="resourceSubText">
                         {v.model_label} · {v.active ? "En service" : "Archivé"}
+                      </span>
+                      <span className="vehicleTariffs">
+                        {cat.rates
+                          .filter((r) => r.model === v.model_id && !r.validTo)
+                          .map((r) => (
+                            <span key={r.id} className="chip">
+                              {r.support} {(r.cents / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}/h
+                            </span>
+                          ))}
+                        {(() => {
+                          const n = cat.offers.filter(
+                            (o) => !o.modelIds || o.modelIds.length === 0 || o.modelIds.includes(v.model_id),
+                          ).length;
+                          return (
+                            <span className="chip accent">
+                              {n} offre{n > 1 ? "s" : ""}
+                            </span>
+                          );
+                        })()}
+                        {!cat.rates.some((r) => r.model === v.model_id) && (
+                          <span className="chip warn">Aucun tarif pour ce modèle</span>
+                        )}
                       </span>
                     </div>
 
@@ -395,7 +425,7 @@ export function ResourceSettings({
               >
                 {cat.models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.label}
+                    {modelOptionLabel(cat, m)}
                   </option>
                 ))}
               </select>
@@ -518,7 +548,7 @@ export function ResourceSettings({
               <select name="modelId">
                 {cat.models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.label}
+                    {modelOptionLabel(cat, m)}
                   </option>
                 ))}
               </select>

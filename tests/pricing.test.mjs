@@ -85,3 +85,16 @@ test("recherche normalise accents et téléphone", () => {
   assert.equal(normalizeSearch("Raphaël DUPONT"), "raphaeldupont");
   assert.equal(normalizeSearch("06 12.34-56 78"), "0612345678");
 });
+
+test("une offre réservée à certains modèles est refusée sur un autre modèle", () => {
+  const r = [
+    { id: "a", model: "clio", support: "GoPermis", cents: 3500, validFrom: "2026-01-01", validTo: null },
+    { id: "b", model: "rs3", support: "GoPermis", cents: 7000, validFrom: "2026-01-01", validTo: null },
+  ];
+  const offers = [{ id: "rs3-only", paidMinutes: 300, bonusMinutes: 60, singlePayment: true, modelIds: ["rs3"] }];
+  const base = { support: "GoPermis", minutes: 300, offerId: "rs3-only", date: "2026-06-01" };
+  assert.equal(quote(r, offers, { ...base, model: "rs3" }).potentialBonusMinutes, 60);
+  assert.throws(() => quote(r, offers, { ...base, model: "clio" }), /ne s'applique pas/);
+  const all = [{ ...offers[0], modelIds: [] }];
+  assert.equal(quote(r, all, { ...base, model: "clio" }).offerId, "rs3-only");
+});

@@ -133,7 +133,7 @@ export function Schedule({
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
 
   // Formula wizard states in Booking modal
-  const [selectedGearbox, setSelectedGearbox] = useState<"clio-manual" | "clio-auto" | "rs3">("clio-manual");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedSupport, setSelectedSupport] = useState<"GoPermis" | "Personnel">("GoPermis");
 
   const refresh = useCallback(async () => {
@@ -333,10 +333,13 @@ export function Schedule({
   };
 
   // Filter vehicles according to selected formula
-  const matchingVehicles = useMemo(() => {
-    if (!resources) return [];
-    return resources.vehicles.filter((v) => v.active && v.model_id === selectedGearbox);
-  }, [resources, selectedGearbox]);
+  const activeVehicles = useMemo(
+    () => (resources ? resources.vehicles.filter((v) => v.active) : []),
+    [resources],
+  );
+  const selectedVehicle = activeVehicles.find((v) => v.id === selectedVehicleId);
+  // RS3 : accompagnement GoPermis uniquement.
+  const personnelAllowed = selectedVehicle?.model_id !== "rs3";
 
   return (
     <div className="calendarWorkspace">
@@ -847,37 +850,33 @@ export function Schedule({
               </label>
             )}
 
-            {/* Formula choice step 1: Transmission / Boîte */}
-            <div className="formulaSection">
-              <span className="formulaStepLabel">1. Type de transmission / Boîte</span>
-              <div className="segmentedChoiceRow">
-                <button
-                  type="button"
-                  className={`segmentBtn ${selectedGearbox === "clio-manual" ? "active" : ""}`}
-                  onClick={() => setSelectedGearbox("clio-manual")}
-                >
-                  Boîte Manuelle
-                </button>
-                <button
-                  type="button"
-                  className={`segmentBtn ${selectedGearbox === "clio-auto" ? "active" : ""}`}
-                  onClick={() => setSelectedGearbox("clio-auto")}
-                >
-                  Boîte Automatique
-                </button>
-                <button
-                  type="button"
-                  className={`segmentBtn ${selectedGearbox === "rs3" ? "active" : ""}`}
-                  onClick={() => setSelectedGearbox("rs3")}
-                >
-                  Audi RS3
-                </button>
-              </div>
-            </div>
+            {/* 1. Véhicule : un seul sélecteur, la boîte se déduit du modèle */}
+            <label>
+              Véhicule
+              <select
+                name="vehicleId"
+                required
+                value={selectedVehicleId}
+                onChange={(e) => {
+                  setSelectedVehicleId(e.target.value);
+                  const v = activeVehicles.find((x) => x.id === e.target.value);
+                  if (v?.model_id === "rs3") setSelectedSupport("GoPermis");
+                }}
+              >
+                <option value="" disabled>
+                  Choisir un véhicule
+                </option>
+                {activeVehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label} · {v.model_label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             {/* Formula choice step 2: Avec ou sans accompagnateur */}
             <div className="formulaSection">
-              <span className="formulaStepLabel">2. Mode d&apos;encadrement</span>
+              <span className="formulaStepLabel">Mode d&apos;encadrement</span>
               <div className="segmentedChoiceRow">
                 <button
                   type="button"
@@ -890,6 +889,8 @@ export function Schedule({
                   type="button"
                   className={`segmentBtn ${selectedSupport === "Personnel" ? "active" : ""}`}
                   onClick={() => setSelectedSupport("Personnel")}
+                  disabled={!personnelAllowed}
+                  title={personnelAllowed ? undefined : "Accompagnement GoPermis uniquement sur RS3"}
                 >
                   Accompagnateur personnel (Supervisée)
                 </button>
@@ -922,31 +923,6 @@ export function Schedule({
                         </option>
                       ))}
                   </>
-                )}
-              </select>
-            </label>
-
-            {/* Vehicle selection (filtered by chosen gearbox) */}
-            <label>
-              Véhicule disponible
-              <select name="vehicleId" required defaultValue="">
-                <option value="" disabled>
-                  Choisir un véhicule disponible
-                </option>
-                {matchingVehicles.length === 0 ? (
-                  resources.vehicles
-                    .filter((v) => v.active)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label} · {v.model_label}
-                      </option>
-                    ))
-                ) : (
-                  matchingVehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label} · {v.model_label}
-                    </option>
-                  ))
                 )}
               </select>
             </label>

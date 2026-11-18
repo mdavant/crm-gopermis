@@ -1,991 +1,503 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ShieldCheck,
-  UserPlus,
   ArrowLeft,
-  Key,
-  Trash2,
-  Edit2,
-  Check,
-  AlertCircle,
-  Calendar,
-  Users,
-  HardDrive,
-  Database,
+  UserPlus,
   RefreshCw,
-  X,
-  Eye,
-  EyeOff,
+  ShieldCheck,
+  KeyRound,
+  Copy,
+  Check,
+  Edit2,
+  Power,
+  AlertTriangle,
+  Clock3,
+  CalendarDays,
+  Users,
+  Wallet,
+  FolderOpen,
+  Car,
+  Settings2,
 } from "lucide-react";
 import { api, type AdminUser, type User } from "../lib/api-types";
-import { useApp } from "./app-context";
+import {
+  ALL_PERMISSIONS,
+  PERMISSION_MODULES,
+  ROLE_PRESETS,
+  presetPermissions,
+  withRequirements,
+  withoutDependents,
+  type RolePresetId,
+} from "../lib/permissions";
+import { Modal } from "./modal";
+
+const MODULE_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  planning: CalendarDays,
+  clients: Users,
+  payments: Wallet,
+  documents: FolderOpen,
+  catalog: Car,
+  admin: Settings2,
+};
+const TOTAL = ALL_PERMISSIONS.filter((p) => !p.restriction && p.key !== "admin.full").length;
 
 interface AdminPanelProps {
   currentUser: User;
   onBackToDashboard: () => void;
 }
 
-const PRESET_TEMPLATES: Record<
-  "admin" | "instructor" | "secretary" | "custom",
-  { label: string; desc: string; permissions: string[] }
-> = {
-  admin: {
-    label: "Administrateur",
-    desc: "Accès complet à tous les modules, au panel admin et à tous les dossiers",
-    permissions: [
-      "admin.full",
-      "planning.create",
-      "clients.view",
-      "clients.create",
-      "clients.edit",
-      "drive.all",
-      "catalog.edit",
-    ],
-  },
-  instructor: {
-    label: "Moniteur",
-    desc: "Planning limité à son nom ou sans accompagnateur, consultation des dossiers",
-    permissions: ["planning.create", "planning.own_only", "clients.view"],
-  },
-  secretary: {
-    label: "Secrétaire / Accueil",
-    desc: "Gestion complète du planning, création et modification des dossiers élèves",
-    permissions: [
-      "planning.create",
-      "clients.view",
-      "clients.create",
-      "clients.edit",
-    ],
-  },
-  custom: {
-    label: "Personnalisé",
-    desc: "Configuration sur-mesure case par case",
-    permissions: [],
-  },
+type Draft = {
+  id?: string;
+  name: string;
+  email: string;
+  rolePreset: RolePresetId;
+  permissions: Set<string>;
+  active: boolean;
 };
 
-const PERMISSION_GROUPS = [
-  {
-    category: "Planning & Calendrier",
-    icon: Calendar,
-    items: [
-      {
-        id: "planning.create",
-        label: "Créer des séances et réservations au planning",
-        hint: "Permet de programmer des cours de conduite, examens et remises à niveau",
-      },
-      {
-        id: "planning.own_only",
-        label: "Limiter l'accompagnateur à son propre nom ou sans accompagnateur",
-        hint: "Spécifique moniteur : ne peut pas inscrire d'autres moniteurs à sa place",
-      },
-    ],
-  },
-  {
-    category: "Clients & Dossiers Élèves",
-    icon: Users,
-    items: [
-      {
-        id: "clients.view",
-        label: "Consulter la liste et les fiches des élèves",
-        hint: "Accès en lecture aux coordonnées, forfaits et historique d'heures",
-      },
-      {
-        id: "clients.create",
-        label: "Créer de nouveaux dossiers élèves",
-        hint: "Permet d'ajouter une fiche élève avec téléphone, statut et origine",
-      },
-      {
-        id: "clients.edit",
-        label: "Modifier les dossiers et informations élèves",
-        hint: "Permet d'éditer les coordonnées, statuts et pièces justificatives",
-      },
-    ],
-  },
-  {
-    category: "Explorateur de fichiers / Drive",
-    icon: HardDrive,
-    items: [
-      {
-        id: "drive.all",
-        label: "Accès étendu à tous les dossiers du Drive (Réservé admin)",
-        hint: "Permet de voir et gérer l'ensemble des répertoires et documents de l'auto-école",
-      },
-    ],
-  },
-  {
-    category: "Données de l'auto-école",
-    icon: Database,
-    items: [
-      {
-        id: "catalog.edit",
-        label: "Modifier les tarifs, offres, véhicules et moniteurs",
-        hint: "Autorise la modification du catalogue officiel et de la flotte",
-      },
-    ],
-  },
-  {
-    category: "Super-Administration",
-    icon: ShieldCheck,
-    items: [
-      {
-        id: "admin.full",
-        label: "Accès Super-Administrateur (Panel Admin & Gestion des rôles)",
-        hint: "Donne le plein pouvoir sur le CRM et la création des profils équipe",
-      },
-    ],
-  },
-];
+const fmtDate = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "Jamais";
+
+function presetLabel(id: string) {
+  return ROLE_PRESETS.find((p) => p.id === id)?.label ?? "Personnalisé";
+}
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="btnIconTiny"
+      title={`Copier ${label}`}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        });
+      }}
+    >
+      {done ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
+export function CredentialsCard({ identifier, password, name }: { identifier: string; password: string; name?: string }) {
+  return (
+    <div className="credCard">
+      {name && <strong className="credName">{name}</strong>}
+      <div className="credRow">
+        <span>Identifiant</span>
+        <code>{identifier}</code>
+        <CopyButton value={identifier} label="l'identifiant" />
+      </div>
+      <div className="credRow">
+        <span>Mot de passe temporaire</span>
+        <code>{password}</code>
+        <CopyButton value={password} label="le mot de passe" />
+      </div>
+    </div>
+  );
+}
 
 export function AdminPanel({ currentUser, onBackToDashboard }: AdminPanelProps) {
-  const { theme } = useApp();
-  const isDark = theme === "dark";
-
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [message, setMessage] = useState("");
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [issued, setIssued] = useState<{ name: string; identifier: string; password: string } | null>(null);
+  const isFullAdmin = currentUser.permissions.includes("admin.full");
 
-  // Modal / Drawer state
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
-
-  // Form state
-  const [formName, setFormName] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formPassword, setFormPassword] = useState("");
-  const [formRolePreset, setFormRolePreset] = useState<
-    "admin" | "instructor" | "secretary" | "custom"
-  >("instructor");
-  const [formPermissions, setFormPermissions] = useState<Set<string>>(
-    new Set(PRESET_TEMPLATES.instructor.permissions)
-  );
-  const [showPassword, setShowPassword] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const loadUsers = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
-      const data = await api<AdminUser[]>("admin/users");
-      setUsers(data);
-    } catch (err) {
-      setError((err as Error).message);
+      setUsers(await api<AdminUser[]>("admin/users"));
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+    void load();
+  }, [load]);
 
-  const openCreateModal = () => {
-    setEditingUser(null);
-    setFormName("");
-    setFormEmail("");
-    setFormPassword("");
-    setFormRolePreset("instructor");
-    setFormPermissions(new Set(PRESET_TEMPLATES.instructor.permissions));
-    setShowPassword(false);
-    setModalOpen(true);
-    setError("");
-  };
+  const pending = useMemo(() => users.filter((u) => u.active && u.mustChangePassword && u.temporaryPassword), [users]);
 
-  const openEditModal = (u: AdminUser) => {
-    setEditingUser(u);
-    setFormName(u.name);
-    setFormEmail(u.email);
-    setFormPassword("");
-    setFormRolePreset(u.rolePreset);
-    setFormPermissions(new Set(u.permissions));
-    setShowPassword(false);
-    setModalOpen(true);
-    setError("");
-  };
-
-  const handlePresetSelect = (presetKey: "admin" | "instructor" | "secretary" | "custom") => {
-    setFormRolePreset(presetKey);
-    if (presetKey !== "custom") {
-      setFormPermissions(new Set(PRESET_TEMPLATES[presetKey].permissions));
-    }
-  };
-
-  const togglePermission = (permId: string) => {
-    setFormPermissions((prev) => {
-      const next = new Set(prev);
-      if (next.has(permId)) {
-        next.delete(permId);
-      } else {
-        next.add(permId);
-      }
-      return next;
+  const openCreate = () =>
+    setDraft({
+      name: "",
+      email: "",
+      rolePreset: "instructor",
+      permissions: new Set(presetPermissions("instructor")),
+      active: true,
     });
-    setFormRolePreset("custom");
+
+  const openEdit = (u: AdminUser) =>
+    setDraft({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      rolePreset: (u.rolePreset as RolePresetId) || "custom",
+      permissions: new Set(u.permissions.includes("admin.full") ? ["admin.full"] : u.permissions),
+      active: u.active,
+    });
+
+  const toggle = (key: string) => {
+    if (!draft) return;
+    const has = draft.permissions.has(key);
+    const next = has ? withoutDependents(draft.permissions, key) : withRequirements([...draft.permissions, key]);
+    setDraft({ ...draft, permissions: next, rolePreset: "custom" });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccessMsg("");
-    setSubmitting(true);
+  const toggleModule = (moduleId: string, on: boolean) => {
+    if (!draft) return;
+    const mod = PERMISSION_MODULES.find((m) => m.id === moduleId)!;
+    let next = new Set(draft.permissions);
+    for (const p of mod.permissions) {
+      if (p.restriction || p.sensitive) continue;
+      next = on ? withRequirements([...next, p.key]) : withoutDependents(next, p.key);
+    }
+    setDraft({ ...draft, permissions: next, rolePreset: "custom" });
+  };
 
+  async function act(fn: () => Promise<unknown>, success: string) {
+    setBusy(true);
+    setError("");
+    setMessage("");
     try {
-      if (editingUser) {
-        await api("admin/users/update", {
-          id: editingUser.id,
-          name: formName.trim(),
-          rolePreset: formRolePreset,
-          permissions: Array.from(formPermissions),
-          ...(formPassword.trim() ? { newPassword: formPassword.trim() } : {}),
-        });
-        setSuccessMsg(`Profil de ${formName} mis à jour avec succès.`);
-      } else {
-        if (!formPassword.trim()) {
-          setError("Veuillez renseigner un mot de passe initial.");
-          setSubmitting(false);
-          return;
-        }
-        await api("admin/users", {
-          email: formEmail.trim(),
-          name: formName.trim(),
-          password: formPassword.trim(),
-          rolePreset: formRolePreset,
-          permissions: Array.from(formPermissions),
-        });
-        setSuccessMsg(`Nouveau profil pour ${formName} créé avec succès.`);
-      }
-      setModalOpen(false);
-      await loadUsers();
+      await fn();
+      setMessage(success);
+      await load();
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft) return;
+    const permissions = [...draft.permissions];
+    if (draft.id) {
+      const ok = await act(
+        () => api("admin/users/update", { id: draft.id, name: draft.name, rolePreset: draft.rolePreset, permissions }),
+        "Profil mis à jour.",
+      );
+      if (ok) setDraft(null);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await api<{ identifier: string; temporaryPassword: string }>("admin/users", {
+        name: draft.name,
+        email: draft.email,
+        rolePreset: draft.rolePreset,
+        permissions,
+      });
+      setIssued({ name: draft.name, identifier: res.identifier, password: res.temporaryPassword });
+      setDraft(null);
+      await load();
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
 
-  const handleDelete = async (u: AdminUser) => {
-    if (u.id === currentUser.id) {
-      alert("Vous ne pouvez pas supprimer votre propre compte administrateur.");
-      return;
-    }
-    if (!window.confirm(`Supprimer définitivement le profil de "${u.name}" (${u.email}) ?`)) {
-      return;
-    }
+  const resetPassword = async (u: AdminUser) => {
+    if (!window.confirm(`Générer un nouveau mot de passe temporaire pour ${u.name} ? Ses sessions seront fermées.`)) return;
+    setBusy(true);
     setError("");
     try {
-      await api("admin/users/delete", { id: u.id });
-      setSuccessMsg(`Profil de ${u.name} supprimé.`);
-      await loadUsers();
+      const res = await api<{ temporaryPassword: string }>("admin/users/update", { id: u.id, resetPassword: true });
+      setIssued({ name: u.name, identifier: u.email, password: res.temporaryPassword });
+      await load();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
-  const c = {
-    surface: isDark ? "#0b101b" : "transparent",
-    cardBg: isDark ? "#111827" : "rgba(255, 255, 255, 0.5)",
-    subtleBg: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.38)",
-    border: isDark ? "#1e293b" : "rgba(255, 255, 255, 0.75)",
-    textHeading: isDark ? "#f8fafc" : "var(--ink)",
-    textBody: isDark ? "#cbd5e1" : "var(--ink-2)",
-    textMuted: isDark ? "#94a3b8" : "var(--ink-3)",
-    blueBrand: "var(--acc)",
-    blueSoft: isDark ? "color-mix(in oklab, var(--acc) 20%, transparent)" : "var(--acc-soft)",
+  const setActive = (u: AdminUser, active: boolean) => {
+    if (!active && !window.confirm(`Désactiver le compte de ${u.name} ? Il sera immédiatement déconnecté.`)) return;
+    void act(() => api("admin/users/update", { id: u.id, active }), active ? "Compte réactivé." : "Compte désactivé.");
   };
 
+  const draftIsAdmin = draft?.permissions.has("admin.full") ?? false;
+
   return (
-    <div
-      style={{
-        padding: "32px 40px 60px",
-        background: c.surface,
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        gap: "24px",
-      }}
-    >
-      {/* Top Breadcrumb & Return to Dashboard (matching Image 2) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button
-          type="button"
-          onClick={onBackToDashboard}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: c.blueBrand,
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: 0,
-          }}
-        >
-          <ArrowLeft size={16} />
-          <span>Retour au tableau de bord</span>
+    <div className="adminWorkspace">
+      <div className="adminTopRow">
+        <button type="button" className="linkButton" onClick={onBackToDashboard}>
+          <ArrowLeft size={15} /> Retour au tableau de bord
         </button>
-
-        <button
-          type="button"
-          onClick={openCreateModal}
-          style={{
-            height: "38px",
-            padding: "0 18px",
-            borderRadius: "10px",
-            border: "none",
-            background: c.blueBrand,
-            color: "#ffffff",
-            fontSize: "13px",
-            fontWeight: 700,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
-            transition: "all 0.15s ease",
-          }}
-        >
-          <UserPlus size={16} />
-          <span>Créer un profil</span>
-        </button>
+        <div className="adminTopActions">
+          <button type="button" className="btnSecondary" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={15} /> Actualiser
+          </button>
+          <button type="button" className="btnPrimary" onClick={openCreate}>
+            <UserPlus size={15} /> Nouveau membre
+          </button>
+        </div>
       </div>
 
-      {/* Main Header */}
       <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "10px",
-              background: c.blueSoft,
-              color: c.blueBrand,
-              display: "grid",
-              placeItems: "center",
-            }}
-          >
-            <ShieldCheck size={20} />
-          </div>
-          <div>
-            <h1
-              style={{
-                fontSize: "24px",
-                fontWeight: 800,
-                color: c.textHeading,
-                margin: 0,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Panel Administration & Rôles
-            </h1>
-            <p style={{ margin: "3px 0 0", fontSize: "13px", color: c.textMuted }}>
-              Gérez les accès équipe, définissez les permissions granulaires et configurez les profils moniteurs.
-            </p>
-          </div>
-        </div>
+        <p className="eyebrow">ÉQUIPE & SÉCURITÉ</p>
+        <h1 className="adminTitle">
+          <ShieldCheck size={28} /> Panel d&apos;administration
+        </h1>
+        <p className="dashSubtitle">
+          Créez les comptes de l&apos;équipe, transmettez leurs identifiants temporaires et réglez précisément leurs accès.
+        </p>
       </div>
 
-      {/* Feedback alerts */}
       {error && (
-        <div
-          style={{
-            background: "#fee2e2",
-            border: "1px solid #fca5a5",
-            borderRadius: "12px",
-            padding: "12px 16px",
-            color: "#991b1b",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => setError("")}
-            style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", fontWeight: 700 }}
-          >
-            ×
-          </button>
+        <div className="calendarAlert errorAlert">
+          <AlertTriangle size={16} />
+          <span>{error}</span>
+          <button onClick={() => setError("")}>×</button>
+        </div>
+      )}
+      {message && (
+        <div className="calendarAlert successAlert">
+          <Check size={16} />
+          <span>{message}</span>
+          <button onClick={() => setMessage("")}>×</button>
         </div>
       )}
 
-      {successMsg && (
-        <div
-          style={{
-            background: "#ecfdf5",
-            border: "1px solid #6ee7b7",
-            borderRadius: "12px",
-            padding: "12px 16px",
-            color: "#065f46",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Check size={16} />
-            <span>{successMsg}</span>
-          </div>
-          <button
-            onClick={() => setSuccessMsg("")}
-            style={{ background: "transparent", border: "none", color: "#065f46", cursor: "pointer", fontWeight: 700 }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Team Members List Card (matching Image 2 Settings table) */}
-      <div
-        style={{
-          background: c.cardBg,
-          border: `1px solid ${c.border}`,
-          borderRadius: "18px",
-          overflow: "hidden",
-          boxShadow: isDark ? "0 2px 6px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.03)",
-        }}
-      >
-        <div
-          style={{
-            padding: "18px 24px",
-            borderBottom: `1px solid ${c.border}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <h3 style={{ fontSize: "15px", fontWeight: 700, margin: 0, color: c.textHeading }}>
-              Membres de l&apos;équipe ({users.length})
-            </h3>
-            <span style={{ fontSize: "12px", color: c.textMuted }}>
-              Chaque membre se connecte avec son identifiant et ses autorisations dédiées.
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={loadUsers}
-            title="Actualiser la liste"
-            style={{
-              background: "transparent",
-              border: `1px solid ${c.border}`,
-              borderRadius: "8px",
-              padding: "6px 10px",
-              color: c.textMuted,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "12px",
-            }}
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-            <span>Actualiser</span>
-          </button>
-        </div>
-
-        {loading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: c.textMuted }}>
-            <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 8px", color: c.blueBrand }} />
-            <p style={{ fontSize: "13px" }}>Chargement des profils…</p>
-          </div>
-        ) : users.length === 0 ? (
-          <div style={{ padding: "48px 20px", textAlign: "center" }}>
-            <Users size={36} style={{ color: c.textMuted, margin: "0 auto 10px" }} />
-            <h4 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: c.textHeading }}>
-              Aucun profil créé
-            </h4>
-            <p style={{ margin: "0 0 16px", fontSize: "12.5px", color: c.textMuted }}>
-              Créez le premier compte moniteur ou administrateur.
-            </p>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              style={{
-                background: c.blueBrand,
-                color: "#fff",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: 650,
-                fontSize: "12.5px",
-              }}
-            >
-              Créer un profil
-            </button>
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr
-                  style={{
-                    background: c.subtleBg,
-                    borderBottom: `1px solid ${c.border}`,
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: c.textMuted,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  <th style={{ padding: "12px 24px", textAlign: "left" }}>Utilisateur</th>
-                  <th style={{ padding: "12px 18px", textAlign: "left" }}>Identifiant / Email</th>
-                  <th style={{ padding: "12px 18px", textAlign: "left" }}>Rôle</th>
-                  <th style={{ padding: "12px 18px", textAlign: "left" }}>Permissions</th>
-                  <th style={{ padding: "12px 18px", textAlign: "left" }}>Statut</th>
-                  <th style={{ padding: "12px 24px", textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const initial = u.name.slice(0, 1).toUpperCase();
-                  const isAdmin = u.rolePreset === "admin" || u.permissions.includes("admin.full");
-                  const isInstructor = u.rolePreset === "instructor" || u.permissions.includes("planning.own_only");
-
-                  return (
-                    <tr
-                      key={u.id}
-                      style={{
-                        borderBottom: `1px solid ${c.border}`,
-                        fontSize: "13px",
-                        color: c.textBody,
-                        transition: "background 0.12s ease",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = c.subtleBg)}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <td style={{ padding: "14px 24px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <div
-                            style={{
-                              width: "34px",
-                              height: "34px",
-                              borderRadius: "50%",
-                              background: isAdmin ? c.blueBrand : (isDark ? "#334155" : "#e2e8f0"),
-                              color: isAdmin ? "#ffffff" : c.textHeading,
-                              fontWeight: 800,
-                              fontSize: "12px",
-                              display: "grid",
-                              placeItems: "center",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {initial}
-                          </div>
-                          <div>
-                            <strong style={{ color: c.textHeading, display: "block" }}>{u.name}</strong>
-                            {u.id === currentUser.id && (
-                              <span style={{ fontSize: "11px", color: c.blueBrand, fontWeight: 700 }}>
-                                (Votre compte actuel)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={{ padding: "14px 18px", color: c.textMuted }}>{u.email}</td>
-
-                      <td style={{ padding: "14px 18px" }}>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            padding: "3px 10px",
-                            borderRadius: "12px",
-                            background: isAdmin
-                              ? c.blueSoft
-                              : isInstructor
-                              ? (isDark ? "#1e293b" : "#f1f5f9")
-                              : (isDark ? "#334155" : "#e2e8f0"),
-                            color: isAdmin ? c.blueBrand : c.textHeading,
-                            border: isAdmin ? `1px solid ${c.blueBrand}` : "none",
-                          }}
-                        >
-                          {isAdmin
-                            ? "Administrateur"
-                            : isInstructor
-                            ? "Moniteur"
-                            : u.rolePreset === "secretary"
-                            ? "Secrétariat"
-                            : "Personnalisé"}
-                        </span>
-                      </td>
-
-                      <td style={{ padding: "14px 18px" }}>
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            color: c.textMuted,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {isAdmin ? "Toutes autorisations (7/7)" : `${u.permissions.length} activée(s)`}
-                        </span>
-                      </td>
-
-                      <td style={{ padding: "14px 18px" }}>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            color: u.active ? "#059669" : "#dc2626",
-                            background: u.active ? "#ecfdf5" : "#fee2e2",
-                            padding: "2px 8px",
-                            borderRadius: "10px",
-                          }}
-                        >
-                          {u.active ? "Actif" : "Désactivé"}
-                        </span>
-                      </td>
-
-                      <td style={{ padding: "14px 24px", textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(u)}
-                            title="Modifier le profil & permissions"
-                            style={{
-                              background: "transparent",
-                              border: `1px solid ${c.border}`,
-                              borderRadius: "7px",
-                              padding: "6px 10px",
-                              color: c.blueBrand,
-                              fontSize: "12px",
-                              fontWeight: 650,
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <Edit2 size={13} />
-                            <span>Gérer</span>
-                          </button>
-
-                          {u.id !== currentUser.id && (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(u)}
-                              title="Supprimer ce compte"
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                borderRadius: "7px",
-                                padding: "6px 8px",
-                                color: "#dc2626",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* CREATE / EDIT PROFILE MODAL */}
-      {modalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(5px)",
-            zIndex: 1000,
-            display: "grid",
-            placeItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setModalOpen(false)}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "680px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              background: c.surface,
-              border: `1px solid ${c.border}`,
-              borderRadius: "22px",
-              padding: "26px 28px",
-              boxShadow: isDark ? "0 25px 60px rgba(0,0,0,0.6)" : "0 25px 60px rgba(15,23,42,0.2)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "10px",
-                    background: c.blueSoft,
-                    color: c.blueBrand,
-                    display: "grid",
-                    placeItems: "center",
-                  }}
-                >
-                  <Key size={18} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: "17px", fontWeight: 800, margin: 0, color: c.textHeading }}>
-                    {editingUser ? `Modifier les accès de ${editingUser.name}` : "Créer un nouveau profil utilisateur"}
-                  </h3>
-                  <span style={{ fontSize: "12px", color: c.textMuted }}>
-                    Définissez les identifiants et cochez les permissions autorisées.
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: "4px" }}
-              >
-                <X size={20} />
-              </button>
+      {pending.length > 0 && (
+        <section className="card pendingCreds">
+          <div className="sectionCardHeader">
+            <div className="sectionTitleWithBadge">
+              <KeyRound size={18} />
+              <h3 className="sectionCardTitle">Identifiants temporaires à transmettre</h3>
+              <span className="badgeNeutral">{pending.length}</span>
             </div>
+          </div>
+          <p className="helperText">
+            Chaque personne devra choisir son propre mot de passe à sa première connexion ; le code temporaire disparaît
+            alors de cette liste.
+          </p>
+          <div className="credGrid">
+            {pending.map((u) => (
+              <CredentialsCard key={u.id} name={u.name} identifier={u.email} password={u.temporaryPassword!} />
+            ))}
+          </div>
+        </section>
+      )}
 
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-              {/* Identity & Credentials */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "14px",
-                }}
-              >
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: c.textHeading }}>
-                  Nom complet
-                  <input
-                    type="text"
-                    required
-                    placeholder="ex: Lucas Martin"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    style={{
-                      height: "38px",
-                      padding: "0 12px",
-                      borderRadius: "9px",
-                      border: `1px solid ${c.border}`,
-                      background: c.subtleBg,
-                      color: c.textHeading,
-                      fontSize: "13px",
-                      outline: "none",
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: c.textHeading }}>
-                  Identifiant ou Email
-                  <input
-                    type="text"
-                    required
-                    disabled={!!editingUser}
-                    placeholder="ex: moniteur.lucas"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    style={{
-                      height: "38px",
-                      padding: "0 12px",
-                      borderRadius: "9px",
-                      border: `1px solid ${c.border}`,
-                      background: editingUser ? (isDark ? "#1e293b" : "#f1f5f9") : c.subtleBg,
-                      color: editingUser ? c.textMuted : c.textHeading,
-                      fontSize: "13px",
-                      outline: "none",
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Password field */}
-              <div>
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: c.textHeading }}>
-                  {editingUser ? "Nouveau mot de passe (laisser vide pour ne pas modifier)" : "Mot de passe initial"}
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      required={!editingUser}
-                      placeholder={editingUser ? "••••••••••••" : "Au moins 4 caractères"}
-                      value={formPassword}
-                      onChange={(e) => setFormPassword(e.target.value)}
-                      style={{
-                        width: "100%",
-                        height: "38px",
-                        paddingLeft: "12px",
-                        paddingRight: "36px",
-                        borderRadius: "9px",
-                        border: `1px solid ${c.border}`,
-                        background: c.subtleBg,
-                        color: c.textHeading,
-                        fontSize: "13px",
-                        outline: "none",
-                      }}
-                    />
+      <section className="card">
+        <div className="sectionCardHeader">
+          <div className="sectionTitleWithBadge">
+            <Users size={18} />
+            <h3 className="sectionCardTitle">Membres de l&apos;équipe</h3>
+            <span className="badgeNeutral">{users.length}</span>
+          </div>
+        </div>
+        {loading && users.length === 0 ? (
+          <p className="emptyHelp">Chargement…</p>
+        ) : (
+          <div className="memberList">
+            {users.map((u) => {
+              const admin = u.permissions.includes("admin.full");
+              const count = admin ? TOTAL : u.permissions.filter((p) => p !== "planning.own_only" && p !== "admin.full").length;
+              const status = !u.active ? "off" : u.mustChangePassword ? "pending" : "on";
+              return (
+                <div key={u.id} className={`memberRow ${u.active ? "" : "inactive"}`}>
+                  <div className="memberAvatar">{u.name.slice(0, 2).toUpperCase()}</div>
+                  <div className="memberMain">
+                    <strong>
+                      {u.name}
+                      {u.id === currentUser.id && <span className="memberYou"> · vous</span>}
+                    </strong>
+                    <span>{u.email}</span>
+                  </div>
+                  <span className={`chip ${admin ? "accent" : ""}`}>{admin ? "Administrateur" : presetLabel(u.rolePreset)}</span>
+                  <div className="memberPerms" title="Accès accordés">
+                    <div className="permMeter">
+                      <span style={{ width: `${Math.round((count / TOTAL) * 100)}%` }} />
+                    </div>
+                    <small>
+                      {count}/{TOTAL} accès
+                    </small>
+                  </div>
+                  <span className={`statusPill ${status}`}>
+                    {status === "on" ? "Actif" : status === "pending" ? "1re connexion en attente" : "Désactivé"}
+                  </span>
+                  <span className="memberLogin">
+                    <Clock3 size={12} /> {fmtDate(u.lastLoginAt)}
+                  </span>
+                  <div className="memberActions">
+                    <button type="button" className="btnIconTiny" title="Modifier les accès" onClick={() => openEdit(u)}>
+                      <Edit2 size={13} />
+                    </button>
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: "absolute",
-                        right: "8px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        background: "transparent",
-                        border: "none",
-                        color: c.textMuted,
-                        cursor: "pointer",
-                        display: "grid",
-                        placeItems: "center",
-                      }}
+                      className="btnIconTiny"
+                      title="Réinitialiser le mot de passe"
+                      disabled={busy || !u.active}
+                      onClick={() => void resetPassword(u)}
                     >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      <KeyRound size={13} />
                     </button>
-                  </div>
-                </label>
-              </div>
-
-              {/* Role Presets (Cards / Radio) */}
-              <div>
-                <span style={{ display: "block", fontSize: "13px", fontWeight: 700, color: c.textHeading, marginBottom: "8px" }}>
-                  Profil préconfiguré
-                </span>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
-                  {(["admin", "instructor", "secretary", "custom"] as const).map((key) => {
-                    const item = PRESET_TEMPLATES[key];
-                    const isSelected = formRolePreset === key;
-                    return (
+                    {u.id !== currentUser.id && (
                       <button
-                        key={key}
                         type="button"
-                        onClick={() => handlePresetSelect(key)}
-                        style={{
-                          padding: "10px",
-                          borderRadius: "11px",
-                          border: isSelected ? `2px solid ${c.blueBrand}` : `1px solid ${c.border}`,
-                          background: isSelected ? c.blueSoft : c.subtleBg,
-                          textAlign: "left",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease",
-                        }}
+                        className={`btnIconTiny ${u.active ? "danger" : ""}`}
+                        title={u.active ? "Désactiver le compte" : "Réactiver le compte"}
+                        disabled={busy}
+                        onClick={() => setActive(u, !u.active)}
                       >
-                        <strong
-                          style={{
-                            display: "block",
-                            fontSize: "12.5px",
-                            color: isSelected ? c.blueBrand : c.textHeading,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {item.label}
-                        </strong>
-                        <span style={{ fontSize: "10.5px", color: c.textMuted, marginTop: "2px", display: "block", lineHeight: 1.25 }}>
-                          {key === "admin"
-                            ? "Tout pouvoir"
-                            : key === "instructor"
-                            ? "Moniteur auto"
-                            : key === "secretary"
-                            ? "Secrétariat"
-                            : "Sur-mesure"}
-                        </span>
+                        <Power size={13} />
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-              {/* Granular Permissions Section */}
-              <div
-                style={{
-                  borderTop: `1px solid ${c.border}`,
-                  paddingTop: "14px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
+      {draft && (
+        <Modal wide title={draft.id ? `Accès de ${draft.name}` : "Nouveau membre de l'équipe"} close={() => setDraft(null)}>
+          <form onSubmit={save} className="memberForm">
+            <div className="formGrid">
+              <label>
+                Nom complet
+                <input
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  placeholder="ex : Lucas Martin"
+                  required
+                  minLength={2}
+                  maxLength={150}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Identifiant de connexion
+                <input
+                  value={draft.email}
+                  onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                  placeholder="ex : lucas.martin ou lucas@gopermis.fr"
+                  required
+                  minLength={3}
+                  maxLength={254}
+                  disabled={Boolean(draft.id)}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+            {!draft.id && (
+              <p className="helperText">
+                <KeyRound size={13} /> Un mot de passe temporaire est généré automatiquement et affiché après la création. Le
+                membre choisira le sien à sa première connexion.
+              </p>
+            )}
+
+            <span className="formLabel">Profil de départ</span>
+            <div className="presetRow">
+              {ROLE_PRESETS.filter((p) => isFullAdmin || p.id !== "admin").map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`presetChip ${draft.rolePreset === p.id ? "active" : ""}`}
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      rolePreset: p.id,
+                      permissions: p.id === "custom" ? draft.permissions : new Set(presetPermissions(p.id)),
+                    })
+                  }
+                >
+                  <strong>{p.label}</strong>
+                  <small>{p.hint}</small>
+                </button>
+              ))}
+            </div>
+
+            <div className="permHeader">
+              <span className="formLabel">Accès détaillés</span>
+              <small>
+                {draftIsAdmin ? "Tous les droits" : `${[...draft.permissions].filter((k) => k !== "planning.own_only").length} accès cochés`}
+              </small>
+            </div>
+
+            {draftIsAdmin ? (
+              <div className="adminAllNotice">
+                <ShieldCheck size={18} />
                 <div>
-                  <h4 style={{ fontSize: "13.5px", fontWeight: 800, margin: "0 0 4px", color: c.textHeading }}>
-                    Permissions granulaires
-                  </h4>
-                  <p style={{ margin: 0, fontSize: "11.5px", color: c.textMuted }}>
-                    Cochez ou décochez les autorisations spécifiques attribuées à cet utilisateur.
-                  </p>
+                  <strong>Administrateur complet</strong>
+                  <p>Ce compte a tous les accès, y compris ceux ajoutés plus tard.</p>
                 </div>
-
-                {PERMISSION_GROUPS.map((group) => {
-                  const GroupIcon = group.icon;
+                {isFullAdmin && (
+                  <button
+                    type="button"
+                    className="btnSecondary"
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        rolePreset: "custom",
+                        permissions: withRequirements(
+                          ALL_PERMISSIONS.filter((p) => !p.sensitive && !p.restriction).map((p) => p.key),
+                        ),
+                      })
+                    }
+                  >
+                    Personnaliser
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="permModules">
+                {PERMISSION_MODULES.map((m) => {
+                  const Icon = MODULE_ICONS[m.id] ?? Settings2;
+                  const regular = m.permissions.filter((p) => !p.restriction && !p.sensitive);
+                  const onCount = regular.filter((p) => draft.permissions.has(p.key)).length;
+                  const all = regular.length > 0 && onCount === regular.length;
                   return (
-                    <div
-                      key={group.category}
-                      style={{
-                        background: c.subtleBg,
-                        border: `1px solid ${c.border}`,
-                        borderRadius: "12px",
-                        padding: "12px 14px",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                        <GroupIcon size={15} style={{ color: c.blueBrand }} />
-                        <strong style={{ fontSize: "12.5px", color: c.textHeading }}>{group.category}</strong>
+                    <div key={m.id} className={`permModule ${onCount ? "on" : ""}`}>
+                      <div className="permModuleHead">
+                        <span className="permModuleIcon">
+                          <Icon size={16} />
+                        </span>
+                        <div>
+                          <strong>{m.label}</strong>
+                          <small>{m.description}</small>
+                        </div>
+                        {regular.length > 0 && (
+                          <button type="button" className="permModuleAll" onClick={() => toggleModule(m.id, !all)}>
+                            {all ? "Tout retirer" : "Tout autoriser"}
+                          </button>
+                        )}
                       </div>
-
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {group.items.map((perm) => {
-                          const isChecked = formPermissions.has(perm.id) || formPermissions.has("admin.full");
-                          const isLockedByAdmin = formPermissions.has("admin.full") && perm.id !== "admin.full";
-
+                      <div className="permList">
+                        {m.permissions.map((p) => {
+                          if (p.sensitive && !isFullAdmin) return null;
+                          const checked = draft.permissions.has(p.key);
+                          const isChild = Boolean(p.requires?.some((r) => m.permissions.some((x) => x.key === r)));
                           return (
                             <label
-                              key={perm.id}
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "10px",
-                                cursor: isLockedByAdmin ? "default" : "pointer",
-                                opacity: isLockedByAdmin ? 0.75 : 1,
-                              }}
+                              key={p.key}
+                              className={`permItem ${isChild ? "child" : ""} ${p.restriction ? "restriction" : ""} ${p.sensitive ? "sensitive" : ""}`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                disabled={isLockedByAdmin}
-                                onChange={() => togglePermission(perm.id)}
-                                style={{
-                                  marginTop: "3px",
-                                  width: "16px",
-                                  height: "16px",
-                                  accentColor: c.blueBrand,
-                                  cursor: "pointer",
-                                }}
-                              />
-                              <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: "12px", fontWeight: 700, color: c.textHeading, display: "block" }}>
-                                  {perm.label}
-                                </span>
-                                <span style={{ fontSize: "11px", color: c.textMuted, display: "block" }}>
-                                  {perm.hint}
-                                </span>
-                              </div>
+                              <input type="checkbox" checked={checked} onChange={() => toggle(p.key)} />
+                              <span className="permText">
+                                <strong>{p.label}</strong>
+                                <small>{p.description}</small>
+                              </span>
+                              {p.restriction && <span className="chip warn">Restriction</span>}
+                              {p.sensitive && <span className="chip accent">Sensible</span>}
                             </label>
                           );
                         })}
@@ -994,59 +506,33 @@ export function AdminPanel({ currentUser, onBackToDashboard }: AdminPanelProps) 
                   );
                 })}
               </div>
+            )}
 
-              {/* Submit Buttons */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  borderTop: `1px solid ${c.border}`,
-                  paddingTop: "14px",
-                  marginTop: "6px",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: "9px",
-                    border: `1px solid ${c.border}`,
-                    background: "transparent",
-                    color: c.textBody,
-                    fontSize: "13px",
-                    fontWeight: 650,
-                    cursor: "pointer",
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{
-                    padding: "8px 20px",
-                    borderRadius: "9px",
-                    border: "none",
-                    background: c.blueBrand,
-                    color: "#ffffff",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    boxShadow: "0 2px 8px rgba(37,99,235,0.35)",
-                  }}
-                >
-                  {submitting
-                    ? "Enregistrement…"
-                    : editingUser
-                    ? "Enregistrer les modifications"
-                    : "Créer le profil"}
-                </button>
-              </div>
-            </form>
+            <div className="modalButtonsRow">
+              <button type="button" className="btnSecondary" onClick={() => setDraft(null)}>
+                Annuler
+              </button>
+              <button type="submit" className="btnPrimary" disabled={busy}>
+                {busy ? "Enregistrement…" : draft.id ? "Enregistrer les accès" : "Créer le compte"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {issued && (
+        <Modal title="Identifiants temporaires" close={() => setIssued(null)}>
+          <p className="modalNotice">
+            Transmettez ces identifiants à <strong>{issued.name}</strong>. À sa première connexion, il devra choisir son propre
+            mot de passe. Ils restent visibles dans ce panel jusque-là.
+          </p>
+          <CredentialsCard identifier={issued.identifier} password={issued.password} />
+          <div className="modalButtonsRow">
+            <button type="button" className="btnPrimary" onClick={() => setIssued(null)}>
+              C&apos;est noté
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

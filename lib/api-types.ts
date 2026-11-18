@@ -8,6 +8,7 @@ export type User = {
   email?: string;
   permissions: string[];
   roles?: string[];
+  mustChangePassword?: boolean;
 };
 
 export type AdminUser = {
@@ -15,9 +16,12 @@ export type AdminUser = {
   email: string;
   name: string;
   active: boolean;
-  rolePreset: "admin" | "instructor" | "secretary" | "custom";
+  rolePreset: "admin" | "manager" | "instructor" | "secretary" | "custom";
   permissions: string[];
   createdAt: string;
+  lastLoginAt?: string | null;
+  mustChangePassword: boolean;
+  temporaryPassword: string | null;
 };
 export type Catalog = {
   rates: Rate[];

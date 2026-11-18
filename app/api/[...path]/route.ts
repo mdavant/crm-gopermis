@@ -110,7 +110,8 @@ async function handle(
     if (route === "auth/register" && isPost) return NextResponse.json(await registerAccount(await json(), req), {status:201});
     if ((route === "logout" || route === "auth/logout") && isPost) return NextResponse.json(await logoutAccount());
     if (route === "auth/password" && isPost) return NextResponse.json(await changePassword(await json()));
-    if (route === "me" && !isPost) return NextResponse.json(await requireUser());
+    if (route === "me" && !isPost)
+      return NextResponse.json(await requireUser(undefined, { allowPendingPassword: true }));
     if (route === "me/update" && isPost) {
       const u = await requireUser();
       const body = z.object({ name:z.string().trim().min(1).max(150), password:z.string().min(14).max(256).optional(), currentPassword:z.string().max(256).optional() }).strict().parse(await json());
@@ -152,7 +153,7 @@ async function handle(
       return NextResponse.json(await updateCatalog(await json(), u.id));
     }
     if (route === "clients/delete" && isPost) {
-      const u = await requireUser("clients.write");
+      const u = await requireUser("clients.archive");
       const b = z.object({ id: z.string().uuid() }).parse(await json());
       return NextResponse.json(await deleteClient(b.id, u.id));
     }
@@ -371,7 +372,7 @@ async function handle(
       return NextResponse.json(await completeBooking(path[1], u.id));
     }
     if (route === "drive/items" && !isPost) {
-      await requireUser();
+      await requireUser("drive.read");
       const url = new URL(req.url);
       const parentId = url.searchParams.get("parentId");
       const search = url.searchParams.get("q") ?? undefined;
@@ -382,11 +383,11 @@ async function handle(
       );
     }
     if (route === "drive/folders-tree" && !isPost) {
-      await requireUser();
+      await requireUser("drive.read");
       return NextResponse.json(await getFolderTree());
     }
     if (route === "drive/folder" && isPost) {
-      const u = await requireUser();
+      const u = await requireUser("drive.write");
       const body = await json(64000);
       return NextResponse.json(
         await createFolder({ ...body, userId: u.id }),
@@ -394,7 +395,7 @@ async function handle(
       );
     }
     if (route === "drive/file" && isPost) {
-      const u = await requireUser();
+      const u = await requireUser("drive.write");
       const body = await json(35 * 1024 * 1024);
       return NextResponse.json(
         await createFile({ ...body, userId: u.id }),
@@ -402,14 +403,14 @@ async function handle(
       );
     }
     if (route === "drive/update" && isPost) {
-      const u = await requireUser();
+      const u = await requireUser("drive.write");
       const body = await json(64000);
       return NextResponse.json(
         await updateDriveItem(body.id, body.updates, u.id)
       );
     }
     if (route === "drive/delete" && isPost) {
-      const u = await requireUser();
+      const u = await requireUser("drive.delete");
       const body = await json(64000);
       return NextResponse.json(
         await deleteDriveItem(body.id, u.id)

@@ -24,6 +24,7 @@ import { NotificationBell } from "./notification-bell";
 import { clearPreviewSession } from "../lib/session";
 import { api } from "../lib/api-types";
 import { CommandPalette, type PaletteAction } from "./command-palette";
+import { ForcePasswordChange } from "./force-password";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const {
@@ -79,6 +80,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return <AuthGate onAuthenticated={refreshUser} />;
+  }
+
+  if (user.mustChangePassword) {
+    return <ForcePasswordChange user={user} onDone={() => void refreshUser()} />;
   }
 
   const navItems = [

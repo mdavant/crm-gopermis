@@ -68,9 +68,30 @@ function parseJsonCol<T>(val: unknown): T {
   return val as T;
 }
 
+function groupLinks(rows: Array<Record<string, unknown>>) {
+  const map = new Map<string, string[]>();
+  for (const r of rows) {
+    const k = String(r.offer_id);
+    map.set(k, [...(map.get(k) ?? []), String(r.model_id)]);
+  }
+  return map;
+}
+
+/** Identifiant lisible à partir d'un libellé (« Peugeot 208 BVA » → « peugeot-208-bva »). */
+export function slugId(label: string) {
+  const base = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return base || "element";
+}
+
 export async function catalog() {
   if (isMysqlMode()) {
-    const [rates, offers, types, models] = await Promise.all([
+    const [rates, offers, types, models, links] = await Promise.all([
       mysqlQuery(
         `SELECT id, model, support, cents, DATE_FORMAT(valid_from, '%Y-%m-%d') AS validFrom, DATE_FORMAT(valid_to, '%Y-%m-%d') AS validTo FROM tariff_versions`,
       ),
@@ -78,20 +99,23 @@ export async function catalog() {
         `SELECT id, label, paid_minutes AS paidMinutes, bonus_minutes AS bonusMinutes, single_payment AS singlePayment FROM offers WHERE active = 1`,
       ),
       mysqlQuery(`SELECT id, label, pricing_mode FROM service_types WHERE active = 1`),
-      mysqlQuery(`SELECT id, label FROM vehicle_models`),
+      mysqlQuery(`SELECT id, label FROM vehicle_models ORDER BY label`),
+      mysqlQuery(`SELECT offer_id, model_id FROM offer_models`),
     ]);
+    const byOffer = groupLinks(links as Array<Record<string, unknown>>);
     return {
       rates: rates as Rate[],
       offers: (offers as Array<Record<string, unknown>>).map((o) => ({
         ...o,
         singlePayment: Boolean(o.singlePayment),
-      })) as (Offer & { label: string })[],
+        modelIds: byOffer.get(String(o.id)) ?? [],
+      })) as (Offer & { label: string; modelIds: string[] })[],
       types: types as { id: string; label: string; pricing_mode: string }[],
       models: models as { id: string; label: string }[],
     };
   }
 
-  const [rates, offers, types, models] = await Promise.all([
+  const [rates, offers, types, models, links] = await Promise.all([
     db().query(
       `SELECT id,model,support,cents,to_char(valid_from,'YYYY-MM-DD') AS "validFrom",to_char(valid_to,'YYYY-MM-DD') AS "validTo" FROM tariff_version`,
     ),
@@ -99,11 +123,16 @@ export async function catalog() {
       'SELECT id,label,paid_minutes AS "paidMinutes",bonus_minutes AS "bonusMinutes",single_payment AS "singlePayment" FROM offer WHERE active',
     ),
     db().query("SELECT id,label,pricing_mode FROM service_type WHERE active"),
-    db().query("SELECT * FROM vehicle_model"),
+    db().query("SELECT * FROM vehicle_model ORDER BY label"),
+    db().query("SELECT offer_id, model_id FROM offer_model"),
   ]);
+  const byOffer = groupLinks(links.rows as Array<Record<string, unknown>>);
   return {
     rates: rates.rows as Rate[],
-    offers: offers.rows as (Offer & { label: string })[],
+    offers: (offers.rows as Array<Record<string, unknown>>).map((o) => ({
+      ...o,
+      modelIds: byOffer.get(String(o.id)) ?? [],
+    })) as (Offer & { label: string; modelIds: string[] })[],
     types: types.rows as { id: string; label: string; pricing_mode: string }[],
     models: models.rows as { id: string; label: string }[],
   };
@@ -416,68 +445,192 @@ export async function recordPayment(
   });
 }
 
+const supportEnum = z.enum(["GoPermis", "Personnel"]);
+const modelIdsInput = z.array(z.string().min(1).max(80)).max(50).default([]);
+
+const catalogInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("rate"), id: z.uuid(), cents: z.number().int().min(100).max(100000) }),
+  z.object({
+    kind: z.literal("rateCreate"),
+    model: z.string().min(1).max(80),
+    support: supportEnum,
+    cents: z.number().int().min(100).max(100000),
+  }),
+  z.object({
+    kind: z.literal("model"),
+    label: z.string().trim().min(2).max(150),
+    rates: z
+      .array(z.object({ support: supportEnum, cents: z.number().int().min(100).max(100000) }))
+      .min(1, "Indiquez au moins un tarif horaire")
+      .max(2),
+  }),
+  z.object({
+    kind: z.literal("offer"),
+    id: z.string().min(1).max(80),
+    label: z.string().trim().min(1).max(100),
+    paidMinutes: z.number().int().min(30).max(60000),
+    bonusMinutes: z.number().int().min(0).max(60000),
+    modelIds: modelIdsInput.optional(),
+  }),
+  z.object({
+    kind: z.literal("offerCreate"),
+    label: z.string().trim().min(1).max(100),
+    paidMinutes: z.number().int().min(30).max(60000),
+    bonusMinutes: z.number().int().min(0).max(60000),
+    modelIds: modelIdsInput,
+  }),
+  z.object({ kind: z.literal("offerArchive"), id: z.string().min(1).max(80) }),
+]);
+
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Paris" });
+
 export async function updateCatalog(raw: unknown, actor: string) {
-  const x = z
-    .discriminatedUnion("kind", [
-      z.object({
-        kind: z.literal("rate"),
-        id: z.uuid(),
-        cents: z.number().int().min(100),
-      }),
-      z.object({
-        kind: z.literal("offer"),
-        id: z.string(),
-        label: z.string().trim().min(1).max(100),
-        paidMinutes: z.number().int().min(1),
-        bonusMinutes: z.number().int().min(0),
-      }),
-    ])
-    .parse(raw);
+  const x = catalogInput.parse(raw);
+  if ("rates" in x && new Set(x.rates.map((r) => r.support)).size !== x.rates.length)
+    throw new HttpError(422, "Un seul tarif par type d'encadrement.");
 
   if (isMysqlMode()) {
     return mysqlTransaction(async (conn) => {
+      const exec = async (sql: string, params: (string | number | null)[] = []) =>
+        (await conn.execute(sql, params))[0] as { affectedRows?: number } & Record<string, unknown>[];
+      const modelExists = async (id: string) =>
+        ((await exec("SELECT id FROM vehicle_models WHERE id = ?", [id])) as unknown[]).length > 0;
+      const checkModels = async (ids: string[]) => {
+        for (const id of ids) if (!(await modelExists(id))) throw new HttpError(422, "Modèle de véhicule inconnu");
+      };
+      let entityId = "";
+
       if (x.kind === "rate") {
-        const [res] = await conn.execute(
-          "UPDATE tariff_versions SET cents = ? WHERE id = ?",
-          [x.cents, x.id],
+        const res = await exec("UPDATE tariff_versions SET cents = ? WHERE id = ?", [x.cents, x.id]);
+        if (res.affectedRows === 0) throw new HttpError(404, "Tarif introuvable");
+        entityId = x.id;
+      } else if (x.kind === "rateCreate") {
+        await checkModels([x.model]);
+        const dup = await exec(
+          "SELECT id FROM tariff_versions WHERE model = ? AND support = ? AND (valid_to IS NULL OR valid_to > ?)",
+          [x.model, x.support, today()],
         );
-        if ((res as { affectedRows?: number }).affectedRows === 0) {
-          throw new HttpError(404, "Tarif introuvable");
+        if ((dup as unknown[]).length) throw new HttpError(409, "Ce tarif existe déjà : modifiez-le.");
+        entityId = randomUUID();
+        await exec(
+          "INSERT INTO tariff_versions (id, model, support, cents, valid_from) VALUES (?, ?, ?, ?, ?)",
+          [entityId, x.model, x.support, x.cents, today()],
+        );
+      } else if (x.kind === "model") {
+        let id = slugId(x.label);
+        for (let n = 2; await modelExists(id); n++) id = `${slugId(x.label)}-${n}`;
+        await exec("INSERT INTO vehicle_models (id, label) VALUES (?, ?)", [id, x.label]);
+        for (const r of x.rates)
+          await exec(
+            "INSERT INTO tariff_versions (id, model, support, cents, valid_from) VALUES (?, ?, ?, ?, ?)",
+            [randomUUID(), id, r.support, r.cents, today()],
+          );
+        entityId = id;
+      } else if (x.kind === "offer" || x.kind === "offerCreate") {
+        if (x.kind === "offer") {
+          const res = await exec(
+            "UPDATE offers SET label = ?, paid_minutes = ?, bonus_minutes = ? WHERE id = ?",
+            [x.label, x.paidMinutes, x.bonusMinutes, x.id],
+          );
+          if (res.affectedRows === 0) throw new HttpError(404, "Offre introuvable");
+          entityId = x.id;
+        } else {
+          let id = slugId(x.label);
+          const offerExists = async (v: string) =>
+            ((await exec("SELECT id FROM offers WHERE id = ?", [v])) as unknown[]).length > 0;
+          for (let n = 2; await offerExists(id); n++) id = `${slugId(x.label)}-${n}`;
+          await exec(
+            "INSERT INTO offers (id, label, paid_minutes, bonus_minutes, single_payment, active) VALUES (?, ?, ?, ?, 1, 1)",
+            [id, x.label, x.paidMinutes, x.bonusMinutes],
+          );
+          entityId = id;
+        }
+        if (x.modelIds) {
+          await checkModels(x.modelIds);
+          await exec("DELETE FROM offer_models WHERE offer_id = ?", [entityId]);
+          for (const m of new Set(x.modelIds))
+            await exec("INSERT INTO offer_models (offer_id, model_id) VALUES (?, ?)", [entityId, m]);
         }
       } else {
-        const [res] = await conn.execute(
-          "UPDATE offers SET label = ?, paid_minutes = ?, bonus_minutes = ? WHERE id = ?",
-          [x.label, x.paidMinutes, x.bonusMinutes, x.id],
-        );
-        if ((res as { affectedRows?: number }).affectedRows === 0) {
-          throw new HttpError(404, "Offre introuvable");
-        }
+        const res = await exec("UPDATE offers SET active = 0 WHERE id = ?", [x.id]);
+        if (res.affectedRows === 0) throw new HttpError(404, "Offre introuvable");
+        entityId = x.id;
       }
-      await conn.execute(
+      await exec(
         `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
          VALUES (?, ?, 'catalog.updated', 'catalog', ?, ?)`,
-        [randomUUID(), actor, x.id, JSON.stringify({ kind: x.kind })],
+        [randomUUID(), actor, entityId.slice(0, 36), JSON.stringify({ kind: x.kind, id: entityId })],
       );
-      return { ok: true };
+      return { ok: true, id: entityId };
     });
   }
 
   return transaction(async (c) => {
+    const modelExists = async (id: string) =>
+      Boolean((await c.query("SELECT id FROM vehicle_model WHERE id = $1", [id])).rowCount);
+    const checkModels = async (ids: string[]) => {
+      for (const id of ids) if (!(await modelExists(id))) throw new HttpError(422, "Modèle de véhicule inconnu");
+    };
+    let entityId = "";
     if (x.kind === "rate") {
-      const updated = await c.query(
-        "UPDATE tariff_version SET cents = $1 WHERE id = $2 RETURNING id",
-        [x.cents, x.id],
-      );
+      const updated = await c.query("UPDATE tariff_version SET cents = $1 WHERE id = $2 RETURNING id", [x.cents, x.id]);
       if (!updated.rowCount) throw new HttpError(404, "Tarif introuvable");
-    } else {
-      const updated = await c.query(
-        "UPDATE offer SET label = $1, paid_minutes = $2, bonus_minutes = $3 WHERE id = $4 RETURNING id",
-        [x.label, x.paidMinutes, x.bonusMinutes, x.id],
+      entityId = x.id;
+    } else if (x.kind === "rateCreate") {
+      await checkModels([x.model]);
+      const dup = await c.query(
+        "SELECT id FROM tariff_version WHERE model = $1 AND support = $2 AND (valid_to IS NULL OR valid_to > $3::date)",
+        [x.model, x.support, today()],
       );
+      if (dup.rowCount) throw new HttpError(409, "Ce tarif existe déjà : modifiez-le.");
+      const ins = await c.query(
+        "INSERT INTO tariff_version (model, support, cents, valid_from) VALUES ($1, $2, $3, $4) RETURNING id",
+        [x.model, x.support, x.cents, today()],
+      );
+      entityId = String(ins.rows[0].id);
+    } else if (x.kind === "model") {
+      let id = slugId(x.label);
+      for (let n = 2; await modelExists(id); n++) id = `${slugId(x.label)}-${n}`;
+      await c.query("INSERT INTO vehicle_model (id, label) VALUES ($1, $2)", [id, x.label]);
+      for (const r of x.rates)
+        await c.query("INSERT INTO tariff_version (model, support, cents, valid_from) VALUES ($1, $2, $3, $4)", [
+          id,
+          r.support,
+          r.cents,
+          today(),
+        ]);
+      entityId = id;
+    } else if (x.kind === "offer" || x.kind === "offerCreate") {
+      if (x.kind === "offer") {
+        const updated = await c.query(
+          "UPDATE offer SET label = $1, paid_minutes = $2, bonus_minutes = $3 WHERE id = $4 RETURNING id",
+          [x.label, x.paidMinutes, x.bonusMinutes, x.id],
+        );
+        if (!updated.rowCount) throw new HttpError(404, "Offre introuvable");
+        entityId = x.id;
+      } else {
+        let id = slugId(x.label);
+        for (let n = 2; (await c.query("SELECT id FROM offer WHERE id = $1", [id])).rowCount; n++)
+          id = `${slugId(x.label)}-${n}`;
+        await c.query(
+          "INSERT INTO offer (id, label, paid_minutes, bonus_minutes, single_payment, active) VALUES ($1, $2, $3, $4, true, true)",
+          [id, x.label, x.paidMinutes, x.bonusMinutes],
+        );
+        entityId = id;
+      }
+      if (x.modelIds) {
+        await checkModels(x.modelIds);
+        await c.query("DELETE FROM offer_model WHERE offer_id = $1", [entityId]);
+        for (const m of new Set(x.modelIds))
+          await c.query("INSERT INTO offer_model (offer_id, model_id) VALUES ($1, $2)", [entityId, m]);
+      }
+    } else {
+      const updated = await c.query("UPDATE offer SET active = false WHERE id = $1 RETURNING id", [x.id]);
       if (!updated.rowCount) throw new HttpError(404, "Offre introuvable");
+      entityId = x.id;
     }
-    await audit(c, actor, "catalog.updated", actor, { kind: x.kind, catalogId: x.id });
-    return { ok: true };
+    await audit(c, actor, "catalog.updated", actor, { kind: x.kind, catalogId: entityId });
+    return { ok: true, id: entityId };
   });
 }
 

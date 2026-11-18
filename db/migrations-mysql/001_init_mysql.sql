@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   last_login_at DATETIME(3) NULL,
+  must_change_password TINYINT(1) NOT NULL DEFAULT 0,
+  temp_password VARCHAR(64) NULL,
   UNIQUE KEY uq_users_email (email),
   KEY idx_users_role (role),
   KEY idx_users_active (is_active)

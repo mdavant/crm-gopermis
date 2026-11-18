@@ -45,16 +45,19 @@ export function ClientDetail({
     [type, setType] = useState("extra"),
     [payment, setPayment] = useState<string | null>(null),
     [requestId, setRequestId] = useState("");
-  const minutes = offer
-    ? cat.offers.find((o) => o.id === offer)!.paidMinutes
-    : hours * 60;
+  const offersForModel = cat.offers.filter(
+    (o) => !o.modelIds || o.modelIds.length === 0 || o.modelIds.includes(model),
+  );
+  const selectedOffer = offersForModel.find((o) => o.id === offer);
+  const supportsForModel = cat.rates.filter((r) => r.model === model && !r.validTo).map((r) => r.support);
+  const minutes = selectedOffer ? selectedOffer.paidMinutes : hours * 60;
   let price: ReturnType<typeof quote> | null = null;
   try {
     price = quote(cat.rates, cat.offers, {
       model,
       support,
       minutes,
-      offerId: offer || undefined,
+      offerId: selectedOffer?.id,
       date: new Date().toLocaleDateString("en-CA", {
         timeZone: "Europe/Paris",
       }),
@@ -302,7 +305,7 @@ export function ClientDetail({
                     model,
                     support,
                     minutes,
-                    offerId: offer || undefined,
+                    offerId: selectedOffer?.id,
                   }),
                 () => setAdding(false),
               );
@@ -328,8 +331,14 @@ export function ClientDetail({
               <select
                 value={model}
                 onChange={(e) => {
-                  setModel(e.target.value);
-                  if (e.target.value === "rs3") setSupport("GoPermis");
+                  const next = e.target.value;
+                  setModel(next);
+                  const sup = cat.rates.filter((r) => r.model === next && !r.validTo).map((r) => r.support);
+                  if (sup.length && !sup.includes(support)) setSupport(sup[0]);
+                  const ok = cat.offers.some(
+                    (o) => o.id === offer && (!o.modelIds?.length || o.modelIds.includes(next)),
+                  );
+                  if (!ok) setOffer("");
                 }}
               >
                 {cat.models.map((m) => (
@@ -345,22 +354,22 @@ export function ClientDetail({
                 value={support}
                 onChange={(e) => setSupport(e.target.value)}
               >
-                <option>GoPermis</option>
-                <option disabled={model === "rs3"}>Personnel</option>
+                <option disabled={!supportsForModel.includes("GoPermis")}>GoPermis</option>
+                <option disabled={!supportsForModel.includes("Personnel")}>Personnel</option>
               </select>
             </label>
             <label>
               Forfait
               <select value={offer} onChange={(e) => setOffer(e.target.value)}>
                 <option value="">À l’heure</option>
-                {cat.offers.map((o) => (
+                {offersForModel.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.label}
                   </option>
                 ))}
               </select>
             </label>
-            {!offer && (
+            {!selectedOffer && (
               <label>
                 Heures payantes
                 <input

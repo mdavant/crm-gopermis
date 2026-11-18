@@ -63,16 +63,12 @@ export function verifyPassword(password, encoded) {
   return timingSafeEqual(computed, Buffer.from(hash, "hex")) && valid;
 }
 
-export function accountInput() {
-  const identifier = (
-    process.env.BOOTSTRAP_IDENTIFIER ??
-    process.env.BOOTSTRAP_EMAIL ??
-    ""
-  )
+export function accountInput(env = process.env) {
+  const identifier = (env.BOOTSTRAP_IDENTIFIER ?? env.BOOTSTRAP_EMAIL ?? "")
     .trim()
     .toLowerCase();
-  const password = process.env.BOOTSTRAP_PASSWORD;
-  const name = (process.env.BOOTSTRAP_NAME ?? "").trim();
+  const password = env.BOOTSTRAP_PASSWORD;
+  const name = (env.BOOTSTRAP_NAME ?? "").trim();
   if (
     !identifier ||
     identifier.length > 254 ||

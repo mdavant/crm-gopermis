@@ -3,6 +3,17 @@ import { cp, mkdir, stat } from "node:fs/promises";
 import { once } from "node:events";
 import { resolve } from "node:path";
 
+// Charge un éventuel fichier .env à la racine (sans écraser les variables
+// déjà définies dans le panneau Hostinger), car le serveur standalone change
+// de répertoire courant et ne le trouverait pas.
+for (const file of [".env.production", ".env.local", ".env"]) {
+  try {
+    if (await exists(resolve(process.cwd(), file))) process.loadEnvFile(file);
+  } catch (err) {
+    console.error(`Lecture de ${file} impossible :`, err?.message ?? err);
+  }
+}
+
 const port = process.env.PORT || "3000";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 
@@ -29,6 +40,13 @@ if (await exists(standaloneServer)) {
   const publicDest = resolve(process.cwd(), ".next/standalone/public");
   if (await exists(publicSrc)) {
     await cp(publicSrc, publicDest, { recursive: true, force: true });
+  }
+  const dbSrc = resolve(process.cwd(), "db");
+  if (await exists(dbSrc)) {
+    await cp(dbSrc, resolve(process.cwd(), ".next/standalone/db"), {
+      recursive: true,
+      force: true,
+    });
   }
   args = [standaloneServer];
 } else {

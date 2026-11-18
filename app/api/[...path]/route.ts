@@ -85,7 +85,13 @@ async function handle(
       if (isMysqlMode()) {
         const res = await testMysqlConnection();
         return NextResponse.json(
-          { ok: res.ok, mode: "mysql", database: res.database, version: res.version },
+          {
+            ok: res.ok,
+            mode: "mysql",
+            database: res.database,
+            version: res.version,
+            ...(res.ok ? {} : { code: res.code ?? null, error: res.error }),
+          },
           { status: res.ok ? 200 : 503 },
         );
       }

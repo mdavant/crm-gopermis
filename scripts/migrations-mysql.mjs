@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { getMysqlPool } from "../server/mysql.mjs";
 
 /**
@@ -79,8 +80,21 @@ export function splitSqlStatements(sql) {
   return statements;
 }
 
+/**
+ * Localise db/migrations-mysql. En production Next « standalone », le serveur
+ * change de répertoire courant (.next/standalone) : on cherche donc aussi à
+ * côté du dépôt d'origine.
+ */
 function migrationsDir() {
-  return join(process.cwd(), "db", "migrations-mysql");
+  const candidates = [
+    process.env.MYSQL_MIGRATIONS_DIR,
+    join(process.cwd(), "db", "migrations-mysql"),
+    resolve(process.cwd(), "..", "..", "db", "migrations-mysql"),
+  ].filter(Boolean);
+  for (const dir of candidates) if (existsSync(dir)) return dir;
+  throw new Error(
+    "Dossier db/migrations-mysql introuvable : déployer le dossier db/ avec l'application ou définir MYSQL_MIGRATIONS_DIR.",
+  );
 }
 
 async function ensureSchemaMigrationsTable(conn) {
@@ -92,8 +106,8 @@ async function ensureSchemaMigrationsTable(conn) {
   `);
 }
 
-export async function getMysqlMigrationStatus() {
-  const pool = await getMysqlPool();
+export async function getMysqlMigrationStatus(existingPool) {
+  const pool = existingPool ?? (await getMysqlPool());
   const conn = await pool.getConnection();
   try {
     await ensureSchemaMigrationsTable(conn);
@@ -118,8 +132,8 @@ export async function getMysqlMigrationStatus() {
   }
 }
 
-export async function migrateMysql() {
-  const pool = await getMysqlPool();
+export async function migrateMysql(existingPool) {
+  const pool = existingPool ?? (await getMysqlPool());
   const conn = await pool.getConnection();
   const appliedNow = [];
   try {

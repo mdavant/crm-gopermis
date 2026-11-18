@@ -68,3 +68,12 @@ Le lien « Mon compte · mot de passe » permet de changer son mot de passe avec
 Si l'accès est perdu, l'opérateur du serveur peut fournir RESET_IDENTIFIER et RESET_PASSWORD via sa configuration privée puis exécuter `npm run user:reset-password`. En PGlite, arrêter d'abord le serveur utilisant ce dossier. Aucun compte n'est créé, réactivé ou doté de nouveaux droits par cette récupération ; les sessions sont révoquées et l'action est marquée dans l'audit comme récupération locale par l'opérateur. Ne jamais placer le secret dans une commande historisée ou dans Git.
 
 Le test navigateur d'aperçu supprime volontairement Cookie sur toutes les requêtes API : création du premier administrateur, connexion et rechargement réussissent avec ce blocage. Il vérifie aussi un retour HTML 502, une nouvelle tentative réussie, le redémarrage, les transactions métier sur l'adaptateur direct, le changement/rétablissement du mot de passe et la révocation des sessions. La suite HTTP de production vérifie l'absence de jeton dans le JSON et le refus du transport Bearer d'aperçu.
+
+
+## Production Hostinger (MySQL)
+
+Variables à définir dans le panneau Hostinger (application Node.js → Variables d'environnement) ou dans un fichier `.env` à la racine (jamais commité) : `DATABASE_MODE=mysql`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `APP_ORIGIN` (URL publique exacte, en `https://`).
+
+Au premier accès à la base, l'application applique automatiquement les migrations de `db/migrations-mysql` (désactivable avec `DB_AUTO_MIGRATE=0`). Si la table `users` est vide et que `BOOTSTRAP_EMAIL` / `BOOTSTRAP_PASSWORD` (14 caractères minimum) / `BOOTSTRAP_NAME` sont définis, le premier compte **admin** (permission `admin.full`) est créé. Aucun compte existant n'est modifié ; ces variables peuvent être retirées ensuite. Les autres comptes et leurs permissions se créent depuis le panel admin.
+
+Diagnostic : `GET /api/health` renvoie `ok: true` si la base répond, sinon un `code` MySQL (`ER_ACCESS_DENIED_ERROR` = identifiants/mot de passe faux, `ER_BAD_DB_ERROR` = nom de base faux, `ECONNREFUSED`/`ENOTFOUND` = hôte ou port faux) et le message (mot de passe masqué).

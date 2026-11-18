@@ -57,15 +57,31 @@ export async function getMysqlPool() {
         } finally {
           conn.release();
         }
-        state.pool = pool;
-        return pool;
       } catch (err) {
         await pool.end().catch(() => {});
         const msg = redactSensitive(
           err instanceof Error ? err.message : "Erreur de connexion MySQL",
         );
-        throw new Error(`Connexion MySQL impossible : ${msg}`);
+        const e = new Error(`Connexion MySQL impossible : ${msg}`);
+        e.code = err?.code;
+        console.error(e.message);
+        throw e;
       }
+      try {
+        const { prepareMysql } = await import("./mysql-setup.mjs");
+        await prepareMysql(pool);
+      } catch (err) {
+        await pool.end().catch(() => {});
+        const msg = redactSensitive(
+          err instanceof Error ? err.message : "Erreur d'initialisation MySQL",
+        );
+        const e = new Error(`Initialisation MySQL impossible : ${msg}`);
+        e.code = err?.code;
+        console.error(e.message);
+        throw e;
+      }
+      state.pool = pool;
+      return pool;
     })().catch((err) => {
       state.pending = undefined;
       throw err;
@@ -113,6 +129,7 @@ export async function testMysqlConnection() {
       ok: false,
       database: null,
       version: null,
+      code: err?.code ?? null,
       error: redactSensitive(
         err instanceof Error ? err.message : "Erreur MySQL inconnue",
       ),

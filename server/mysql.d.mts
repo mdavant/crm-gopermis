@@ -14,6 +14,7 @@ export function testMysqlConnection(): Promise<{
   ok: boolean;
   database: string | null;
   version: string | null;
+  code?: string | null;
   error?: string;
 }>;
 export function closeMysqlPool(): Promise<void>;

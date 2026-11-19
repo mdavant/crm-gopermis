@@ -211,23 +211,21 @@ export function DriveView() {
 
   /* ------------------------------------------------------------ Sélection */
 
+  /** Un clic ouvre (dossier ou aperçu) ; la sélection se fait uniquement par la case. */
   const clickItem = (e: React.MouseEvent, it: Entry) => {
     e.stopPropagation();
     setMenu(null);
-    const next = new Set(e.metaKey || e.ctrlKey ? selected : []);
-    if (e.shiftKey && lastClicked.current) {
+    open(it);
+  };
+
+  /** Case à cocher : Maj+clic sélectionne toute la plage depuis la dernière case cochée. */
+  const toggleCheck = (it: Entry, shift = false) => {
+    const next = new Set(selected);
+    if (shift && lastClicked.current) {
       const a = items.findIndex((x) => x.id === lastClicked.current);
       const b = items.findIndex((x) => x.id === it.id);
       if (a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(items[i].id);
-    } else if ((e.metaKey || e.ctrlKey) && selected.has(it.id)) next.delete(it.id);
-    else next.add(it.id);
-    lastClicked.current = it.id;
-    setSelected(next);
-  };
-
-  const toggleCheck = (it: Entry) => {
-    const next = new Set(selected);
-    if (next.has(it.id)) next.delete(it.id);
+    } else if (next.has(it.id)) next.delete(it.id);
     else next.add(it.id);
     lastClicked.current = it.id;
     setSelected(next);
@@ -634,6 +632,47 @@ export function DriveView() {
           </div>
         </header>
 
+        {/* Barre de sélection : remplace les filtres (même hauteur, rien ne se décale) */}
+        <div className="dBarSlot">
+          {selected.size > 0 ? (
+        <div className="dSelBar show">
+          <button type="button" className="dSelClose" onClick={() => setSelected(new Set())} aria-label="Désélectionner">
+            <X size={15} />
+          </button>
+          <strong>
+            {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
+          </strong>
+          <div className="dSelActions">
+            {actions
+              .filter((a) => !PINNED.includes(a.key))
+              .map((a) => (
+                <button key={a.key} type="button" className={a.danger ? "danger" : ""} onClick={a.run} title={a.kbd ? `${a.label} (${a.kbd})` : a.label}>
+                  <a.icon size={15} />
+                  <span>{a.label}</span>
+                </button>
+              ))}
+          </div>
+          {/* Télécharger et supprimer : icônes seules, toujours visibles à droite */}
+          <div className="dSelPinned">
+            {actions
+              .filter((a) => PINNED.includes(a.key))
+              .map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  className={a.danger ? "danger" : ""}
+                  onClick={a.run}
+                  title={a.kbd ? `${a.label} (${a.kbd})` : a.label}
+                  aria-label={a.label}
+                >
+                  <a.icon size={17} />
+                </button>
+              ))}
+          </div>
+        </div>
+
+          ) : (
+            <>
         {!inTrash && (
           <div className="dKinds">
             {KINDS.map((k) => (
@@ -669,41 +708,8 @@ export function DriveView() {
           </div>
         )}
 
-        {/* Barre d'actions de la sélection */}
-        <div className={`dSelBar ${selected.size ? "show" : ""}`}>
-          <button type="button" className="dSelClose" onClick={() => setSelected(new Set())} aria-label="Désélectionner">
-            <X size={15} />
-          </button>
-          <strong>
-            {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
-          </strong>
-          <div className="dSelActions">
-            {actions
-              .filter((a) => !PINNED.includes(a.key))
-              .map((a) => (
-                <button key={a.key} type="button" className={a.danger ? "danger" : ""} onClick={a.run} title={a.kbd ? `${a.label} (${a.kbd})` : a.label}>
-                  <a.icon size={15} />
-                  <span>{a.label}</span>
-                </button>
-              ))}
-          </div>
-          {/* Télécharger et supprimer : icônes seules, toujours visibles à droite */}
-          <div className="dSelPinned">
-            {actions
-              .filter((a) => PINNED.includes(a.key))
-              .map((a) => (
-                <button
-                  key={a.key}
-                  type="button"
-                  className={a.danger ? "danger" : ""}
-                  onClick={a.run}
-                  title={a.kbd ? `${a.label} (${a.kbd})` : a.label}
-                  aria-label={a.label}
-                >
-                  <a.icon size={17} />
-                </button>
-              ))}
-          </div>
+            </>
+          )}
         </div>
 
         {error && (
@@ -770,7 +776,6 @@ export function DriveView() {
                   draggable={canWrite && !inTrash}
                   onDragStart={(e) => onItemDragStart(e, it)}
                   onClick={(e) => clickItem(e, it)}
-                  onDoubleClick={() => open(it)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -780,7 +785,7 @@ export function DriveView() {
                   {...(it.type === "folder" ? dropOn(it.id) : {})}
                 >
                   <span className="dCheck">
-                    <input type="checkbox" checked={selected.has(it.id)} onChange={() => toggleCheck(it)} onClick={(e) => e.stopPropagation()} aria-label={`Sélectionner ${it.name}`} />
+                    <input type="checkbox" checked={selected.has(it.id)} onChange={() => {}} onClick={(e) => { e.stopPropagation(); toggleCheck(it, e.shiftKey); }} aria-label={`Sélectionner ${it.name}`} />
                   </span>
                   <span className="dName">
                     {it.type === "folder" ? <FolderIcon color={it.color} size={26} /> : <FileTypeIcon name={it.name} mime={it.mimeType} size={22} />}
@@ -815,7 +820,6 @@ export function DriveView() {
                   draggable={canWrite && !inTrash}
                   onDragStart={(e) => onItemDragStart(e, it)}
                   onClick={(e) => clickItem(e, it)}
-                  onDoubleClick={() => open(it)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -828,8 +832,11 @@ export function DriveView() {
                     type="checkbox"
                     className="dCardCheck"
                     checked={selected.has(it.id)}
-                    onChange={() => toggleCheck(it)}
-                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => {}}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCheck(it, e.shiftKey);
+                    }}
                     aria-label={`Sélectionner ${it.name}`}
                   />
                   <div className="dThumb">
@@ -1119,6 +1126,54 @@ function FolderPicker({
   );
 }
 
+/** Aperçu Word (.docx) rendu dans le navigateur, sans envoyer le fichier ailleurs. */
+function DocxPreview({ url }: { url: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ renderAsync }, res] = await Promise.all([import("docx-preview"), fetch(url, { credentials: "same-origin", headers: authHeaders() })]);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        if (cancelled || !ref.current) return;
+        ref.current.innerHTML = "";
+        await renderAsync(blob, ref.current, undefined, {
+          className: "docx",
+          inWrapper: true,
+          ignoreWidth: false,
+          breakPages: true,
+          renderHeaders: true,
+          renderFooters: true,
+          useBase64URL: true,
+        });
+        if (!cancelled) setState("ok");
+      } catch {
+        if (!cancelled) setState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  return (
+    <div className="dDocx">
+      {state === "loading" && (
+        <div className="dPreviewNone">
+          <Loader2 size={26} className="spin" /> <p>Ouverture du document…</p>
+        </div>
+      )}
+      {state === "error" && (
+        <div className="dPreviewNone">
+          <p>Impossible d&apos;afficher ce document Word. Téléchargez-le pour l&apos;ouvrir.</p>
+        </div>
+      )}
+      <div ref={ref} className="dDocxBody" hidden={state !== "ok"} />
+    </div>
+  );
+}
+
 function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => void; onDownload: () => void }) {
   const t = fileTypeInfo(item.name, item.mimeType);
   const src = `${item.url}?inline=1`;
@@ -1133,6 +1188,15 @@ function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => vo
     body = <audio src={src} controls autoPlay />;
   } else if (t.ext === "pdf") {
     body = <iframe src={src} title={item.name} className="dPreviewFrame" />;
+  } else if (t.ext === "docx") {
+    body = <DocxPreview url={item.url!} />;
+  } else if (t.ext === "doc") {
+    body = (
+      <div className="dPreviewNone">
+        <FileTypeIcon name={item.name} mime={item.mimeType} size={72} />
+        <p>Ancien format Word (.doc) : téléchargez-le pour l&apos;ouvrir, ou enregistrez-le en .docx pour l&apos;aperçu.</p>
+      </div>
+    );
   } else {
     body = (
       <div className="dPreviewNone">

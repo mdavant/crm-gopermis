@@ -314,7 +314,11 @@ export async function streamFile(id: string, rangeHeader: string | null, inline:
     "Content-Type": showInline ? mime : "application/octet-stream",
     "Content-Disposition": `${showInline ? "inline" : "attachment"}; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'",
+    // Le lecteur PDF du navigateur ne fonctionne pas dans un contexte « sandbox » :
+    // on garde l'isolation pour tous les autres types.
+    ...(showInline && mime === "application/pdf"
+      ? {}
+      : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'" }),
     "Cache-Control": "private, max-age=0",
     "Accept-Ranges": "bytes",
   };

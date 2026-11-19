@@ -1302,3 +1302,17 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .dSelPinned button:hover { transform: translateY(-1px); background: #fff; color: var(--ink); }
 .dSelPinned button.danger { background: #fee2e2; color: #b91c1c; }
 .dSelPinned button.danger:hover { background: #dc2626; color: #fff; }
+
+/* Drive : la barre de sélection occupe la place des filtres (aucun décalage) */
+.dBarSlot { min-height: 46px; margin: 12px 0 8px; display: flex; flex-direction: column; justify-content: center; }
+.dBarSlot > .dKinds, .dBarSlot > .dTrashBar { margin: 0; }
+.dBarSlot > .dSelBar, .dBarSlot > .dSelBar.show { height: 46px; margin: 0; opacity: 1; animation: glassFade .25s var(--ease-out) both; }
+.dItem { cursor: pointer; }
+.dCheck input, .dCardCheck { cursor: pointer; }
+.dCardCheck { opacity: .55; }
+
+/* Aperçu Word */
+.dDocx { width: min(980px, 100%); height: calc(100vh - 110px); overflow: auto; border-radius: 14px; background: #e9e4e1; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); }
+.dDocx .dPreviewNone { color: var(--ink-2); padding: 60px 20px; }
+.dDocxBody .docx-wrapper { background: transparent !important; padding: 24px !important; }
+.dDocxBody .docx-wrapper > section.docx { box-shadow: 0 8px 30px -10px rgba(0,0,0,.35) !important; margin-bottom: 24px !important; }

@@ -29,6 +29,7 @@
     "@electric-sql/pglite-socket": "^0.2.14",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
+    "docx-preview": "^0.3.6",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.24.6",
     "next": "^15.5.28",

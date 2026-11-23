@@ -1,3 +1,4 @@
+import { importDocument, importPlan } from "../../../server/import";
 import { generateClientDocument, generateRentalForBooking, listClientGeneratedDocuments } from "../../../server/generated-docs";
 import * as drive2 from "../../../server/drive-v2";
 import { NextResponse } from "next/server";
@@ -569,6 +570,14 @@ async function handle(
     ) {
       const u = await requireUser();
       return NextResponse.json(await deleteDocument(path[1], u, clientIp));
+    }
+    if (route === "admin/import/plan" && isPost) {
+      const u = await requireUser("admin.full");
+      return NextResponse.json(await importPlan(await json(5_000_000), u.id));
+    }
+    if (route === "admin/import/document" && isPost) {
+      const u = await requireUser("admin.full");
+      return NextResponse.json(await importDocument(await json(), u.id));
     }
     if (route === "admin/users" && !isPost) {
       return NextResponse.json(await listAdminUsers());

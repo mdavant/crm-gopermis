@@ -1364,3 +1364,18 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .bookingRental svg { color: var(--acc); flex-shrink: 0; }
 .bookingRental span { flex: 1; }
 .bookingRental a.btnSecondary { text-decoration: none; display: inline-flex; align-items: center; height: 32px; padding: 0 14px; }
+
+/* Import des dossiers */
+.importCard { display: grid; gap: 12px; }
+.importRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.importFile { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.importSummary { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,.45); border: 1px solid rgba(255,255,255,.8); }
+.importSummary > div { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.importSummary > div svg { color: var(--acc); }
+.importSummary .btnPrimary { margin-left: auto; }
+.importStatus, .importReport p { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 13px; color: var(--ink-2); }
+.importReport { display: grid; gap: 8px; }
+.importBar { height: 8px; }
+.importReport details { font-size: 12.5px; color: var(--ink-2); background: rgba(254,243,199,.55); border-radius: 12px; padding: 8px 12px; }
+.importReport summary { cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.importReport ul { margin: 6px 0 0; padding-left: 18px; max-height: 200px; overflow: auto; }

@@ -30,6 +30,7 @@ import {
   type RolePresetId,
 } from "../lib/permissions";
 import { Modal } from "./modal";
+import { ImportPanel } from "./import-panel";
 
 const MODULE_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   planning: CalendarDays,
@@ -367,6 +368,8 @@ export function AdminPanel({ currentUser, onBackToDashboard }: AdminPanelProps) 
           </div>
         )}
       </section>
+
+      {isFullAdmin && <ImportPanel />}
 
       {draft && (
         <Modal wide title={draft.id ? `Accès de ${draft.name}` : "Nouveau membre de l'équipe"} close={() => setDraft(null)}>

@@ -148,6 +148,8 @@ export type Booking = {
   instructor_color?: string | null;
   service_type?: string | null;
   rental_document_id?: string | null;
+  session_kind?: string | null;
+  notes?: string | null;
   first_name: string;
   last_name: string;
   companion_name: string | null;

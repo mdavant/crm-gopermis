@@ -272,8 +272,9 @@ export function Schedule({
     if (i < 0) return null;
     return list[i].color || INSTRUCTOR_FALLBACK_COLORS[i % INSTRUCTOR_FALLBACK_COLORS.length];
   };
+  const isExam = (b: Booking) => b.service_type === "exam" || b.session_kind === "exam";
   const colorFor = (b: Booking) =>
-    b.service_type === "exam"
+    isExam(b)
       ? planningColors.exam
       : b.instructor_id
         ? instructorColor(b.instructor_id) || b.instructor_color || "#e5484d"
@@ -296,8 +297,8 @@ export function Schedule({
     focus === "all" ||
     (focus.startsWith("i:") && b.instructor_id === focus.slice(2)) ||
     (focus.startsWith("v:") && b.vehicle_id === focus.slice(2)) ||
-    (focus === "companion" && !b.instructor_id && b.service_type !== "exam") ||
-    (focus === "exam" && b.service_type === "exam");
+    (focus === "companion" && !b.instructor_id && !isExam(b)) ||
+    (focus === "exam" && isExam(b));
 
   const activeBookings = (activeFilters ? rows.filter((b) => activeFilters.includes(b.status)) : rows).filter(matchesFocus);
 

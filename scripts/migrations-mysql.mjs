@@ -139,6 +139,13 @@ export async function migrateMysql() {
         .filter((n) => n.endsWith(".sql"))
         .sort();
 
+      // Colonnes des tables existantes ajoutées AVANT les migrations, qui peuvent s'en servir.
+      const preStatements = [];
+      for (const name of files) {
+        preStatements.push(...splitSqlStatements(await readFile(join(migrationsDir(), name), "utf8")));
+      }
+      const pre = await repairMysqlSchema(conn, preStatements);
+
       for (const name of files) {
         const [existing] = await conn.execute(
           "SELECT 1 FROM schema_migrations WHERE name = ?",
@@ -170,7 +177,8 @@ export async function migrateMysql() {
           ...splitSqlStatements(await readFile(join(migrationsDir(), name), "utf8")),
         );
       }
-      repair = await repairMysqlSchema(conn, allStatements);
+      const post = await repairMysqlSchema(conn, allStatements);
+      repair = { added: [...pre.added, ...post.added], failed: post.failed };
     } finally {
       await conn.query("SELECT RELEASE_LOCK('gopermis_crm_migrations')").catch(() => {});
     }

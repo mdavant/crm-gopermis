@@ -1,3 +1,4 @@
+import { generateClientDocument, listClientGeneratedDocuments } from "../../../server/generated-docs";
 import * as drive2 from "../../../server/drive-v2";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -169,6 +170,14 @@ async function handle(
           : await listClients(new URL(req.url).searchParams.get("q") ?? ""),
         { status: isPost ? 201 : 200 },
       );
+    }
+    if (path[0] === "clients" && path[2] === "generate" && path.length === 3 && isPost) {
+      const u = await requireUser("documents.write");
+      return NextResponse.json(await generateClientDocument(path[1], await json(), u.id), { status: 201 });
+    }
+    if (path[0] === "clients" && path[2] === "generated" && path.length === 3 && !isPost) {
+      await requireUser("documents.read");
+      return NextResponse.json(await listClientGeneratedDocuments(path[1]));
     }
     if (path[0] === "clients" && path.length === 2 && !isPost) {
       const u = await requireUser("clients.read");
@@ -531,12 +540,14 @@ async function handle(
       const u = await requireUser();
       const { document, content } = await getAuthorizedDocument(path[1], u);
       const safeDownloadName = document.original_name.replace(/["\r\n]/g, "_");
+      // Aperçu dans la page uniquement pour les PDF ; tout le reste en pièce jointe.
+      const inline = new URL(req.url).searchParams.get("inline") === "1" && document.mime_type === "application/pdf";
       return new NextResponse(new Uint8Array(content), {
         status: 200,
         headers: {
           "Content-Type": document.mime_type,
           "Content-Length": String(content.byteLength),
-          "Content-Disposition": `attachment; filename="${safeDownloadName}"`,
+          "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${safeDownloadName}"`,
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "private, no-store",
         },

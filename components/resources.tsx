@@ -30,6 +30,65 @@ function ColorPicker({ value, onChange, disabled }: { value: string; onChange: (
   );
 }
 
+type VehicleDoc = {
+  registration_number?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  color?: string | null;
+  insurance_signatory?: string | null;
+  insurance_policy?: string | null;
+  insurer?: string | null;
+};
+
+/** Champs repris dans la fiche de location et l'attestation d'assurance. */
+function VehicleDocFields({ v }: { v?: VehicleDoc }) {
+  return (
+    <fieldset className="docFieldset">
+      <legend>Documents (fiche de location, attestation d&apos;assurance)</legend>
+      <div className="formGrid">
+        <label>
+          Immatriculation
+          <input name="registrationNumber" maxLength={32} defaultValue={v?.registration_number ?? ""} placeholder="ex : GA-318-TH" />
+        </label>
+        <label>
+          Couleur
+          <input name="color" maxLength={40} defaultValue={v?.color ?? ""} placeholder="ex : GRIS" />
+        </label>
+        <label>
+          Marque
+          <input name="brand" maxLength={100} defaultValue={v?.brand ?? "RENAULT"} />
+        </label>
+        <label>
+          Modèle (tel qu&apos;écrit sur les documents)
+          <input name="model" maxLength={100} defaultValue={v?.model ?? ""} placeholder="ex : Clio 5" />
+        </label>
+      </div>
+      <label>
+        Signataire de l&apos;attestation d&apos;assurance
+        <input name="insuranceSignatory" maxLength={150} defaultValue={v?.insurance_signatory ?? ""} placeholder="ex : M. AMMICH Mohammed-Amine" />
+      </label>
+      <div className="formGrid">
+        <label>
+          N° de police d&apos;assurance
+          <input name="insurancePolicy" maxLength={60} defaultValue={v?.insurance_policy ?? "AU479942"} />
+        </label>
+        <label>
+          Assureur
+          <input name="insurer" maxLength={255} defaultValue={v?.insurer ?? "GENERALI IARD - 75456, Paris Cedex 09 - France"} />
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+
+const docFieldValues = (f: FormData) =>
+  Object.fromEntries(
+    ["registrationNumber", "brand", "model", "color", "insuranceSignatory", "insurancePolicy", "insurer"].map((k) => [
+      k,
+      String(f.get(k) ?? "").trim(),
+    ]),
+  );
+
 /** « Clio manuelle — Personnel 25 €/h · GoPermis 35 €/h » */
 function modelOptionLabel(cat: Catalog, m: { id: string; label: string }) {
   const rates = cat.rates
@@ -465,6 +524,7 @@ export function ResourceSettings({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const docs = docFieldValues(new FormData(e.currentTarget));
               void save(
                 () =>
                   api("resources/update", {
@@ -473,6 +533,7 @@ export function ResourceSettings({
                     label: editingVehicle.label,
                     modelId: editingVehicle.model_id,
                     active: editingVehicle.active,
+                    ...docs,
                   }),
                 "Véhicule mis à jour avec succès."
               );
@@ -517,6 +578,8 @@ export function ResourceSettings({
               />
               <span>Véhicule actif (disponible pour réservation)</span>
             </label>
+
+            <VehicleDocFields v={data?.vehicles.find((x) => x.id === editingVehicle.id) as VehicleDoc | undefined} />
 
             <div className="modalButtonsRow">
               <button
@@ -609,6 +672,7 @@ export function ResourceSettings({
                     kind: "vehicle",
                     label: f.get("label"),
                     modelId: f.get("modelId"),
+                    ...docFieldValues(f),
                   }),
                 "Véhicule ajouté."
               );
@@ -633,6 +697,7 @@ export function ResourceSettings({
                 ))}
               </select>
             </label>
+            <VehicleDocFields />
             <div className="modalButtonsRow">
               <button
                 type="button"

@@ -1316,3 +1316,37 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .dDocx .dPreviewNone { color: var(--ink-2); padding: 60px 20px; }
 .dDocxBody .docx-wrapper { background: transparent !important; padding: 24px !important; }
 .dDocxBody .docx-wrapper > section.docx { box-shadow: 0 8px 30px -10px rgba(0,0,0,.35) !important; margin-bottom: 24px !important; }
+.docFieldset { border: 1px solid rgba(255,255,255,.85); background: rgba(255,255,255,.35); border-radius: 16px; padding: 12px 14px; margin: 10px 0 4px; display: grid; gap: 8px; }
+.docFieldset legend { font-size: 12px; font-weight: 800; color: var(--ink-2); padding: 0 6px; }
+
+/* Fiche élève : suivi des heures et documents générés */
+.span3 { grid-column: 1 / -1; }
+.hoursStrip { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 14px 16px !important; }
+.hoursItem { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.45); border: 1px solid rgba(255,255,255,.75); }
+.hoursItem > svg { color: var(--acc); flex-shrink: 0; }
+.hoursItem strong { display: block; font-family: var(--font-display); font-size: 18px; letter-spacing: -.02em; color: var(--ink); }
+.hoursItem span { font-size: 11.5px; color: var(--ink-3); }
+.clientDocs { display: grid; gap: 12px; }
+.clientDocsHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.clientDocsHead h2 { margin: 0 0 2px; }
+.clientDocsHead small { color: var(--ink-3); font-size: 12px; }
+.clientDocsActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.genDocList { display: grid; gap: 8px; }
+.genDoc { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.42); border: 1px solid rgba(255,255,255,.75); }
+.genDocIcon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.genDocIcon.rental { background: linear-gradient(150deg, var(--acc-2), var(--acc)); }
+.genDocIcon.insurance { background: linear-gradient(150deg, #34d399, #0f9f7a); }
+.genDocMain { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.genDocMain strong { font-size: 13.5px; color: var(--ink); }
+.genDocMain span { font-size: 12.5px; color: var(--ink-2); }
+.genDocMain small { font-size: 11px; color: var(--ink-3); }
+.genDocBtns { display: flex; gap: 6px; }
+.genDocBtns a.btnIconTiny { display: inline-grid; place-items: center; }
+.genForm { display: grid; gap: 10px; }
+.genGrid4 { display: grid; grid-template-columns: 1.3fr 1fr 1.3fr 1fr; gap: 8px; }
+.genWarn { margin: 0; padding: 9px 12px; border-radius: 12px; font-size: 12.5px; background: rgba(254,243,199,.8); color: #92400e; }
+.genWarn.error { background: #fee2e2; color: #b91c1c; }
+@media (max-width: 900px) { .hoursStrip { grid-template-columns: 1fr 1fr; } .genGrid4 { grid-template-columns: 1fr 1fr; } }
+.genDocBtns .btnIconTiny { width: 32px; height: 32px; display: inline-grid !important; place-items: center; color: var(--ink-2) !important; padding: 0; }
+.genDocBtns .btnIconTiny svg { width: 15px; height: 15px; }
+.modal.modalWide .genForm { max-width: 640px; }

@@ -40,6 +40,9 @@ export type ClientRecord = {
   created_at: string;
   version: number;
   updated_at: string;
+  address?: string | null;
+  birth_date?: string | null;
+  neph?: string | null;
 };
 export type ClientPage = {
   items: ClientRecord[];
@@ -154,6 +157,13 @@ export type Resources = {
     model_id: string;
     model_label: string;
     active: boolean;
+    registration_number?: string | null;
+    brand?: string | null;
+    model?: string | null;
+    color?: string | null;
+    insurance_signatory?: string | null;
+    insurance_policy?: string | null;
+    insurer?: string | null;
   }[];
   instructors: { id: string; name: string; active: boolean; color?: string | null }[];
   planningColors?: { companion: string; exam: string };

@@ -478,6 +478,20 @@ export default function Home() {
               <input name="email" type="email" placeholder="ex: lucas.dubois@email.fr" />
             </label>
             <label>
+              Adresse
+              <input name="address" maxLength={255} placeholder="ex: 2 rue Colette 31200 Toulouse" />
+            </label>
+            <div className="formGrid">
+              <label>
+                Date de naissance
+                <input name="birthDate" type="date" />
+              </label>
+              <label>
+                NEPH (facultatif)
+                <input name="neph" maxLength={20} pattern="[0-9A-Za-z ]{6,20}" placeholder="N° de dossier permis" />
+              </label>
+            </div>
+            <label>
               Origine
               <input
                 name="source"

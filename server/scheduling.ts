@@ -26,6 +26,11 @@ const resourceInput = z.discriminatedUnion("kind", [
     modelId: z.string().min(1).max(80),
     registrationNumber: z.string().trim().max(32).optional(),
     brand: z.string().trim().max(100).optional(),
+    model: z.string().trim().max(100).optional(),
+    color: z.string().trim().max(40).optional(),
+    insuranceSignatory: z.string().trim().max(150).optional(),
+    insurancePolicy: z.string().trim().max(60).optional(),
+    insurer: z.string().trim().max(255).optional(),
     year: z.number().int().min(1980).max(2100).optional(),
   }),
   z.object({
@@ -219,16 +224,21 @@ export async function createResource(raw: unknown, actor: string) {
           const model = (models as Array<{ id: string; label: string }>)[0];
           if (!model) throw new HttpError(422, "Modèle inconnu");
           await conn.execute(
-            `INSERT INTO vehicles (id, model_id, registration_number, brand, model, year, label, active, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            `INSERT INTO vehicles (id, model_id, registration_number, brand, model, year, label, color,
+                                   insurance_signatory, insurance_policy, insurer, active, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
             [
               id,
               x.modelId,
-              x.registrationNumber ?? null,
-              x.brand ?? "Renault",
-              model.label,
+              x.registrationNumber || null,
+              x.brand || "RENAULT",
+              x.model || model.label,
               x.year ?? null,
               x.label,
+              x.color || null,
+              x.insuranceSignatory || null,
+              x.insurancePolicy || null,
+              x.insurer || null,
               actor,
             ],
           );
@@ -343,6 +353,13 @@ export async function updateResource(raw: unknown, actor: string) {
         label: z.string().trim().min(1).max(100),
         modelId: z.string().min(1).max(80).optional(),
         active: z.boolean().optional(),
+        registrationNumber: z.string().trim().max(32).optional(),
+        brand: z.string().trim().max(100).optional(),
+        model: z.string().trim().max(100).optional(),
+        color: z.string().trim().max(40).optional(),
+        insuranceSignatory: z.string().trim().max(150).optional(),
+        insurancePolicy: z.string().trim().max(60).optional(),
+        insurer: z.string().trim().max(255).optional(),
       }),
       z.object({
         kind: z.literal("instructor"),
@@ -378,6 +395,18 @@ export async function updateResource(raw: unknown, actor: string) {
             "UPDATE vehicles SET label = ?, model_id = COALESCE(?, model_id), active = COALESCE(?, active) WHERE id = ?",
             [x.label, x.modelId ?? null, x.active === undefined ? null : x.active ? 1 : 0, x.id],
           );
+          // Informations des documents : un champ envoyé vide efface la valeur.
+          const docCols: [string, string | undefined][] = [
+            ["registration_number", x.registrationNumber],
+            ["brand", x.brand],
+            ["model", x.model],
+            ["color", x.color],
+            ["insurance_signatory", x.insuranceSignatory],
+            ["insurance_policy", x.insurancePolicy],
+            ["insurer", x.insurer],
+          ];
+          for (const [col, val] of docCols)
+            if (val !== undefined) await conn.execute(`UPDATE vehicles SET ${col} = ? WHERE id = ?`, [val || null, x.id]);
         } else {
           const split = splitFullName(x.name);
           await conn.execute(

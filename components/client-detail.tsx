@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Plus } from "lucide-react";
-import { api, type Detail, type Catalog } from "../lib/api-types";
+import { api, type Detail, type Catalog, type Booking } from "../lib/api-types";
+import { ClientDocuments, ClientHoursSummary } from "./client-documents";
 import { quote } from "../domain/pricing";
 import { Schedule } from "./schedule";
 import { ClientEditor } from "./client-editor";
@@ -34,6 +35,14 @@ export function ClientDetail({
   reload: () => Promise<void>;
   onError: (e: string) => void;
 }) {
+  const [clientBookings, setClientBookings] = useState<Booking[]>([]);
+  useEffect(() => {
+    if (!can("schedule.read")) return;
+    api<Booking[]>("bookings?clientId=" + d.client.id)
+      .then(setClientBookings)
+      .catch(() => setClientBookings([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.client.id, d.ledger.length]);
   const [adding, setAdding] = useState(false),
     [editing, setEditing] = useState(false),
     [savedMessage, setSavedMessage] = useState(""),
@@ -118,6 +127,10 @@ export function ClientDetail({
         <Schedule can={can} detail={d} reload={reload} />
       )}
       <div className="detailGrid">
+        <ClientHoursSummary d={d} bookings={clientBookings} />
+        {(can("documents.read") || can("documents.write")) && (
+          <ClientDocuments d={d} cat={cat} can={can} bookings={clientBookings} />
+        )}
         <section className="card">
           <h2>Coordonnées & origine</h2>
           {can("clients.write") && (
@@ -134,6 +147,17 @@ export function ClientDetail({
             {d.client.phone}
             <br />
             {d.client.email}
+            {d.client.address && (
+              <>
+                <br />
+                {d.client.address}
+              </>
+            )}
+          </p>
+          <p>
+            Né(e) le {d.client.birth_date ? d.client.birth_date.slice(0, 10).split("-").reverse().join("/") : "— (à compléter)"}
+            <br />
+            NEPH : {d.client.neph || "—"}
           </p>
           <p>
             {d.client.source} · {d.client.status}

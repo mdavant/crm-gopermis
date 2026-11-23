@@ -160,15 +160,17 @@ export async function createClient(raw: unknown, actor: string) {
       }
 
       await conn.execute(
-        `INSERT INTO clients (id, first_name, last_name, phone, email, address, notes, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO clients (id, first_name, last_name, phone, email, address, birth_date, neph, notes, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           x.firstName,
           x.lastName,
           x.phone,
           cleanEmail,
-          x.address ?? null,
+          x.address || null,
+          x.birthDate || null,
+          x.neph ? x.neph.replace(/\s+/g, "") : null,
           x.notes ?? null,
           x.source,
         ],
@@ -258,14 +260,17 @@ export async function updateClient(id: string, raw: unknown, actor: string) {
 
       await conn.execute(
         `UPDATE clients
-         SET first_name = ?, last_name = ?, phone = ?, email = ?, address = ?, notes = ?, source = ?, version = version + 1
+         SET first_name = ?, last_name = ?, phone = ?, email = ?, address = ?, birth_date = ?, neph = ?, notes = ?, source = ?,
+             version = version + 1
          WHERE id = ?`,
         [
           x.firstName,
           x.lastName,
           x.phone,
           cleanEmail,
-          x.address ?? (previous.address ? String(previous.address) : null),
+          x.address !== undefined ? x.address || null : previous.address ? String(previous.address) : null,
+          x.birthDate !== undefined ? x.birthDate || null : (previous.birth_date as string | Date | null) ?? null,
+          x.neph !== undefined ? (x.neph ? x.neph.replace(/\s+/g, "") : null) : previous.neph ? String(previous.neph) : null,
           x.notes ?? (previous.notes ? String(previous.notes) : null),
           x.source,
           id,

@@ -4,7 +4,7 @@ const nextConfig = {
   // Les migrations SQL sont lues à l'exécution : les inclure dans la sortie
   // standalone publiée (Hostinger lance directement .next/standalone).
   outputFileTracingIncludes: {
-    "/**": ["./db/**/*"],
+    "/**": ["./db/**/*", "./assets/documents/**/*"],
   },
   serverExternalPackages: [
     "@electric-sql/pglite",

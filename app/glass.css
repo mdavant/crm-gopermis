@@ -1350,3 +1350,17 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .genDocBtns .btnIconTiny { width: 32px; height: 32px; display: inline-grid !important; place-items: center; color: var(--ink-2) !important; padding: 0; }
 .genDocBtns .btnIconTiny svg { width: 15px; height: 15px; }
 .modal.modalWide .genForm { max-width: 640px; }
+
+/* Catégories d'élèves */
+.catChips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.catChips button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.85); background: rgba(255,255,255,.45); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.catChips button small { font-size: 10.5px; color: var(--ink-3); font-weight: 700; }
+.catChips button.active { background: var(--ink); color: #fff; border-color: transparent; }
+.catChips button.active small { color: rgba(255,255,255,.7); }
+.catDotSm { width: 9px; height: 9px; border-radius: 50%; background: var(--cat, var(--acc)); }
+.catBadge { display: inline-flex; align-items: center; margin-right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: color-mix(in oklab, var(--cat) 75%, #1c1210); background: color-mix(in oklab, var(--cat) 14%, rgba(255,255,255,.7)); border: 1px solid color-mix(in oklab, var(--cat) 30%, transparent); }
+.clientStatusTag.terminé { background: rgba(226,232,240,.8) !important; color: #475569 !important; }
+.bookingRental { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 10px 0; border-radius: 14px; background: rgba(255,255,255,.5); border: 1px solid rgba(255,255,255,.8); font-size: 13px; color: var(--ink-2); }
+.bookingRental svg { color: var(--acc); flex-shrink: 0; }
+.bookingRental span { flex: 1; }
+.bookingRental a.btnSecondary { text-decoration: none; display: inline-flex; align-items: center; height: 32px; padding: 0 14px; }

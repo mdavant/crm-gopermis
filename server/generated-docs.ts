@@ -176,3 +176,60 @@ export async function listClientGeneratedDocuments(clientId: string) {
     createdBy: r.created_by_name ? String(r.created_by_name) : null,
   }));
 }
+
+/** Heure locale Europe/Paris d'un instant UTC → { date: AAAA-MM-JJ, time: HH:MM }. */
+function parisParts(v: unknown) {
+  const d = v instanceof Date ? v : new Date(String(v));
+  const f = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const g = (t: string) => f.find((p) => p.type === t)?.value ?? "00";
+  return { date: `${g("year")}-${g("month")}-${g("day")}`, time: `${g("hour")}:${g("minute")}` };
+}
+
+/**
+ * Fiche de location générée directement depuis une séance du planning :
+ * véhicule, horaires et tarif « Personnel » du modèle repris automatiquement.
+ */
+export async function generateRentalForBooking(bookingId: string, raw: unknown, userId: string) {
+  if (!isMysqlMode()) throw new HttpError(501, "Génération disponible avec la base MySQL.");
+  z.uuid().parse(bookingId);
+  const opts = z.object({ signatureDate: isoDate.optional() }).parse(raw ?? {});
+  const b = ((await mysqlQuery(
+    `SELECT b.id, b.client_id, b.vehicle_id, b.start_at, b.end_at, b.minutes, v.model_id
+     FROM bookings b JOIN vehicles v ON v.id = b.vehicle_id WHERE b.id = ?`,
+    [bookingId],
+  )) as Row[])[0];
+  if (!b) throw new HttpError(404, "Séance introuvable.");
+  const rate = ((await mysqlQuery(
+    `SELECT cents FROM tariff_versions WHERE model = ? AND support = 'Personnel' AND (valid_to IS NULL OR valid_to > CURDATE())
+     ORDER BY valid_from DESC LIMIT 1`,
+    [b.model_id as string],
+  )) as Row[])[0];
+  const start = parisParts(b.start_at);
+  const end = parisParts(b.end_at);
+  const hourlyCents = rate ? Number(rate.cents) : null;
+  const totalCents = hourlyCents ? Math.round((hourlyCents * Number(b.minutes || 0)) / 60) : 0;
+  return generateClientDocument(
+    String(b.client_id),
+    {
+      kind: "rental",
+      vehicleId: String(b.vehicle_id),
+      bookingId,
+      signatureDate: opts.signatureDate ?? start.date,
+      startDate: start.date,
+      startTime: start.time,
+      endDate: end.date,
+      endTime: end.time,
+      hourlyCents,
+      totalCents,
+    },
+    userId,
+  );
+}

@@ -1,4 +1,22 @@
 import type { ClientRecord } from "../lib/api-types";
+import { CLIENT_CATEGORIES } from "../lib/client-categories";
+
+/** Sélecteur de catégorie d'élève (filière). */
+export function CategorySelect({ value }: { value?: string | null }) {
+  return (
+    <label>
+      Catégorie
+      <select name="category" defaultValue={value ?? ""}>
+        <option value="">— Non classé —</option>
+        {CLIENT_CATEGORIES.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /** Date (ISO ou objet date MySQL) → valeur d'un champ <input type="date">. */
 export function toDateInput(v?: string | null) {
@@ -52,6 +70,7 @@ export function ClientFields({ client }: { client?: ClientRecord }) {
           autoComplete="email"
         />
       </label>
+      <CategorySelect value={client?.category} />
       <label>
         Adresse
         <input

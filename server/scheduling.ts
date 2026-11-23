@@ -674,7 +674,9 @@ export async function listBookings(
     const rows = (await mysqlQuery(
       `SELECT b.*, b.start_at AS starts_at, b.end_at AS ends_at,
               v.label AS vehicle_label, v.model_id AS vehicle_model, i.name AS instructor_name, i.color AS instructor_color,
-              c.first_name, c.last_name, s.type_id AS service_type
+              c.first_name, c.last_name, s.type_id AS service_type,
+              (SELECT g.document_id FROM generated_documents g
+                WHERE g.booking_id = b.id AND g.kind = 'rental' ORDER BY g.created_at DESC LIMIT 1) AS rental_document_id
        FROM bookings b
        JOIN vehicles v ON v.id = b.vehicle_id
        LEFT JOIN instructors i ON i.id = b.instructor_id

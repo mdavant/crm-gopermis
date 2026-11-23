@@ -34,6 +34,7 @@ import { AuthGate } from "../components/auth-gate";
 import { AdminPanel } from "../components/admin-panel";
 import { ForcePasswordChange } from "../components/force-password";
 import { useApp } from "../components/app-context";
+import { CategorySelect } from "../components/client-fields";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { Plus, UserCircle2 } from "lucide-react";
 
@@ -477,6 +478,7 @@ export default function Home() {
               Email (facultatif)
               <input name="email" type="email" placeholder="ex: lucas.dubois@email.fr" />
             </label>
+            <CategorySelect />
             <label>
               Adresse
               <input name="address" maxLength={255} placeholder="ex: 2 rue Colette 31200 Toulouse" />

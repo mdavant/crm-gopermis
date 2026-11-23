@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, RotateCcw } from "lucide-react";
+import { categoryOf } from "../lib/client-categories";
 import { api, type Detail, type Catalog, type Booking } from "../lib/api-types";
 import { ClientDocuments, ClientHoursSummary } from "./client-documents";
 import { quote } from "../domain/pricing";
@@ -101,7 +102,15 @@ export function ClientDetail({
           {d.client.last_name[0]}
         </div>
         <div>
-          <p className="eyebrow" style={{ color: "var(--acc)", fontWeight: 700 }}>FICHE ÉLÈVE</p>
+          <p className="eyebrow" style={{ color: "var(--acc)", fontWeight: 700 }}>
+            FICHE ÉLÈVE
+            {categoryOf(d.client.category) && (
+              <span className="catBadge" style={{ marginLeft: 8, ["--cat" as string]: categoryOf(d.client.category)!.color }}>
+                {categoryOf(d.client.category)!.label}
+              </span>
+            )}
+            {d.client.status === "Terminé" && <span className="clientStatusTag terminé" style={{ marginLeft: 6 }}>Terminé</span>}
+          </p>
           <h1>
             {d.client.first_name} {d.client.last_name}
           </h1>
@@ -109,6 +118,22 @@ export function ClientDetail({
             {d.client.phone} · {d.client.email || "Email non renseigné"}
           </p>
         </div>
+        {can("clients.write") && d.client.status !== "Archivé" && (
+          <button
+            type="button"
+            className="btnSecondary"
+            disabled={busy}
+            onClick={() => {
+              const completed = d.client.status !== "Terminé";
+              if (completed && !window.confirm("Passer cet élève dans les terminés ? Vous pourrez le remettre en cours."))
+                return;
+              void perform(() => api("clients/completion", { id: d.client.id, completed }));
+            }}
+          >
+            {d.client.status === "Terminé" ? <RotateCcw size={15} /> : <CheckCircle2 size={15} />}
+            {d.client.status === "Terminé" ? " Remettre en cours" : " Marquer terminé"}
+          </button>
+        )}
         {can("services.write") && (
           <button
             className="primary"

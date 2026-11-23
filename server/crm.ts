@@ -1,3 +1,4 @@
+import { CLIENT_CATEGORY_IDS } from "../lib/client-categories";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PoolClient } from "pg";
@@ -20,6 +21,7 @@ export const clientInput = z.object({
   birthDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date de naissance invalide"), z.literal("")]).optional(),
   neph: z.union([z.string().trim().regex(/^[0-9A-Za-z ]{6,20}$/, "NEPH invalide"), z.literal("")]).optional(),
   notes: z.string().trim().max(5000).optional(),
+  category: z.union([z.enum(CLIENT_CATEGORY_IDS), z.literal("")]).optional(),
   source: z.string().trim().min(1).max(100).default("Saisie manuelle"),
 });
 

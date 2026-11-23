@@ -43,6 +43,8 @@ export type ClientRecord = {
   address?: string | null;
   birth_date?: string | null;
   neph?: string | null;
+  category?: string | null;
+  completed_at?: string | null;
 };
 export type ClientPage = {
   items: ClientRecord[];
@@ -145,6 +147,7 @@ export type Booking = {
   instructor_name: string | null;
   instructor_color?: string | null;
   service_type?: string | null;
+  rental_document_id?: string | null;
   first_name: string;
   last_name: string;
   companion_name: string | null;

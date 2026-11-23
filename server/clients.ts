@@ -10,7 +10,7 @@ import { normalizeSearch } from "../domain/pricing";
 export const directoryInput = z.object({
   q: z.string().trim().max(200).default(""),
   page: z.coerce.number().int().min(1).max(100000).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  pageSize: z.coerce.number().int().min(1).max(5000).default(25),
   status: z.enum(["Prospect", "Actif", "Terminé", "Archivé"]).optional(),
 });
 
@@ -51,7 +51,8 @@ export async function searchClients(raw: unknown) {
     const offset = Math.max(0, (x.page - 1) * limit);
 
     const items = await mysqlQuery(
-      `SELECT id, first_name, last_name, phone, email, address, notes, source, status, created_at, version, updated_at
+      `SELECT id, first_name, last_name, phone, email, address, birth_date, neph, category, notes, source, status,
+              completed_at, created_at, version, updated_at
        FROM clients ${where}
        ORDER BY created_at DESC, id DESC
        LIMIT ${limit} OFFSET ${offset}`,
@@ -98,7 +99,7 @@ export async function searchClients(raw: unknown) {
 }
 
 export async function listClients(q: string) {
-  return (await searchClients({ q, pageSize: 100 })).items;
+  return (await searchClients({ q, pageSize: 5000 })).items;
 }
 
 async function assertIdentity(
@@ -160,8 +161,8 @@ export async function createClient(raw: unknown, actor: string) {
       }
 
       await conn.execute(
-        `INSERT INTO clients (id, first_name, last_name, phone, email, address, birth_date, neph, notes, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO clients (id, first_name, last_name, phone, email, address, birth_date, neph, notes, source, category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           x.firstName,
@@ -173,6 +174,7 @@ export async function createClient(raw: unknown, actor: string) {
           x.neph ? x.neph.replace(/\s+/g, "") : null,
           x.notes ?? null,
           x.source,
+          x.category || null,
         ],
       );
 
@@ -261,7 +263,7 @@ export async function updateClient(id: string, raw: unknown, actor: string) {
       await conn.execute(
         `UPDATE clients
          SET first_name = ?, last_name = ?, phone = ?, email = ?, address = ?, birth_date = ?, neph = ?, notes = ?, source = ?,
-             version = version + 1
+             category = ?, version = version + 1
          WHERE id = ?`,
         [
           x.firstName,
@@ -273,6 +275,7 @@ export async function updateClient(id: string, raw: unknown, actor: string) {
           x.neph !== undefined ? (x.neph ? x.neph.replace(/\s+/g, "") : null) : previous.neph ? String(previous.neph) : null,
           x.notes ?? (previous.notes ? String(previous.notes) : null),
           x.source,
+          x.category !== undefined ? x.category || null : previous.category ? String(previous.category) : null,
           id,
         ],
       );
@@ -326,5 +329,46 @@ export async function updateClient(id: string, raw: unknown, actor: string) {
       toVersion: x.version + 1,
     });
     return r.rows[0];
+  });
+}
+
+/**
+ * Passe un élève en « Terminé » (il quitte la liste en cours) ou le remet en cours
+ * avec son statut précédent. Rien n'est supprimé.
+ */
+export async function setClientCompletion(raw: unknown, actor: string) {
+  const x = z.object({ id: z.uuid(), completed: z.boolean() }).parse(raw);
+  if (!isMysqlMode()) {
+    await db().query(
+      x.completed
+        ? "UPDATE client SET status='Terminé', version=version+1 WHERE id=$1 AND status<>'Archivé'"
+        : "UPDATE client SET status='Actif', version=version+1 WHERE id=$1 AND status='Terminé'",
+      [x.id],
+    );
+    return { ok: true };
+  }
+  return mysqlTransaction(async (conn) => {
+    const [rows] = await conn.execute("SELECT status, status_before_completion FROM clients WHERE id = ? FOR UPDATE", [x.id]);
+    const c = (rows as Record<string, unknown>[])[0];
+    if (!c) throw new HttpError(404, "Client introuvable");
+    if (x.completed) {
+      if (c.status === "Terminé") return { ok: true };
+      await conn.execute(
+        "UPDATE clients SET status_before_completion = status, status = 'Terminé', completed_at = UTC_TIMESTAMP(3), version = version + 1 WHERE id = ?",
+        [x.id],
+      );
+    } else {
+      if (c.status !== "Terminé") return { ok: true };
+      const back = ["Prospect", "Actif"].includes(String(c.status_before_completion)) ? String(c.status_before_completion) : "Actif";
+      await conn.execute(
+        "UPDATE clients SET status = ?, status_before_completion = NULL, completed_at = NULL, version = version + 1 WHERE id = ?",
+        [back, x.id],
+      );
+    }
+    await conn.execute(
+      `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, 'client', ?, '{}')`,
+      [randomUUID(), actor, x.completed ? "client.completed" : "client.reopened", x.id],
+    );
+    return { ok: true };
   });
 }

@@ -1,9 +1,9 @@
-import { generateClientDocument, listClientGeneratedDocuments } from "../../../server/generated-docs";
+import { generateClientDocument, generateRentalForBooking, listClientGeneratedDocuments } from "../../../server/generated-docs";
 import * as drive2 from "../../../server/drive-v2";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { authenticationStatus, loginAccount, registerAccount, logoutAccount, changePassword } from "../../../server/authentication";
-import { listClients, createClient, searchClients, updateClient } from "../../../server/clients";
+import { listClients, createClient, searchClients, updateClient, setClientCompletion } from "../../../server/clients";
 import { z, ZodError } from "zod";
 import {
   requireUser,
@@ -143,7 +143,7 @@ async function handle(
       await requireUser("clients.read");
       return NextResponse.json(await searchClients(Object.fromEntries(new URL(req.url).searchParams)));
     }
-    if (path[0]==="clients" && path[1]!=="delete" && path.length===2 && isPost) {
+    if (path[0]==="clients" && path[1]!=="delete" && path[1]!=="completion" && path.length===2 && isPost) {
       const u=await requireUser("clients.write");
       return NextResponse.json(await updateClient(path[1],await json(),u.id));
     }
@@ -154,6 +154,10 @@ async function handle(
     if (route === "catalog/update" && isPost) {
       const u = await requireUser("catalog.write");
       return NextResponse.json(await updateCatalog(await json(), u.id));
+    }
+    if (route === "clients/completion" && isPost) {
+      const u = await requireUser("clients.write");
+      return NextResponse.json(await setClientCompletion(await json(), u.id));
     }
     if (route === "clients/delete" && isPost) {
       const u = await requireUser("clients.archive");
@@ -170,6 +174,10 @@ async function handle(
           : await listClients(new URL(req.url).searchParams.get("q") ?? ""),
         { status: isPost ? 201 : 200 },
       );
+    }
+    if (path[0] === "bookings" && path[2] === "rental" && path.length === 3 && isPost) {
+      const u = await requireUser("documents.write");
+      return NextResponse.json(await generateRentalForBooking(path[1], await json(), u.id), { status: 201 });
     }
     if (path[0] === "clients" && path[2] === "generate" && path.length === 3 && isPost) {
       const u = await requireUser("documents.write");

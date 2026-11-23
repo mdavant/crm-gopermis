@@ -18,6 +18,7 @@ import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
+  FileSignature,
 } from "lucide-react";
 
 export const displayDate = (value: string) =>
@@ -845,6 +846,39 @@ export function Schedule({
               <p className="completedNotice">
                 Validée le {displayDate(selectedBooking.completed_at)}
               </p>
+            )}
+
+            {(can("documents.read") || can("documents.write")) && (
+              <div className="bookingRental">
+                <FileSignature size={16} />
+                {selectedBooking.rental_document_id ? (
+                  <>
+                    <span>Fiche de location générée</span>
+                    <a className="btnSecondary" href={`/api/documents/${selectedBooking.rental_document_id}/download?inline=1`} target="_blank" rel="noreferrer">
+                      Ouvrir
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <span>Pas encore de fiche de location</span>
+                    {can("documents.write") && (
+                      <button
+                        type="button"
+                        className="btnSecondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void perform(async () => {
+                            const res = await api<{ documentId: string }>(`bookings/${selectedBooking.id}/rental`, {});
+                            return res;
+                          }, "Fiche de location générée et rangée dans le dossier de l'élève.")
+                        }
+                      >
+                        Générer la fiche
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             )}
 
             <div className="modalActionRow">

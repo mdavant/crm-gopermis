@@ -10,6 +10,8 @@ import {
   Mail,
 } from "lucide-react";
 import { api, type ClientRecord } from "../lib/api-types";
+import { CLIENT_CATEGORIES, categoryOf, isOngoing } from "../lib/client-categories";
+import { CheckCircle2, RotateCcw } from "lucide-react";
 
 interface ClientsViewProps {
   clients: ClientRecord[];
@@ -30,15 +32,34 @@ export function ClientsView({
   onRefresh,
   can,
 }: ClientsViewProps) {
-  const [filter, setFilter] = useState<"all" | "active" | "archived">("all");
+  const [filter, setFilter] = useState<"ongoing" | "completed" | "archived" | "all">("ongoing");
+  const [category, setCategory] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const filteredClients = clients.filter((c) => {
-    if (filter === "active") return c.status !== "Archivé";
-    if (filter === "archived") return c.status === "Archivé";
-    return true;
-  });
+  const inTab = (c: ClientRecord) =>
+    filter === "ongoing" ? isOngoing(c.status) : filter === "completed" ? c.status === "Terminé" : filter === "archived" ? c.status === "Archivé" : true;
+  const filteredClients = clients.filter(
+    (c) => inTab(c) && (category === "all" || (category === "none" ? !c.category : c.category === category)),
+  );
+  const countIn = (pred: (c: ClientRecord) => boolean) =>
+    clients.filter((c) => inTab(c) && pred(c)).length;
+
+  const toggleCompletion = async (e: React.MouseEvent, c: ClientRecord) => {
+    e.stopPropagation();
+    const completed = c.status !== "Terminé";
+    if (completed && !window.confirm(`Passer ${c.first_name} ${c.last_name} dans les élèves terminés ? Vous pourrez le remettre en cours.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("clients/completion", { id: c.id, completed });
+      await onRefresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleDeleteClient = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -107,35 +128,43 @@ export function ClientsView({
         </div>
 
         <div className="clientTabsRow">
-          <button
-            type="button"
-            className={`clientTabBtn ${filter === "all" ? "active" : ""}`}
-            style={filter === "all" ? { background: "var(--acc)", color: "#ffffff" } : {}}
-            onClick={() => setFilter("all")}
-          >
-            Tous ({clients.length})
-          </button>
-          <button
-            type="button"
-            className={`clientTabBtn ${filter === "active" ? "active" : ""}`}
-            style={filter === "active" ? { background: "var(--acc)", color: "#ffffff" } : {}}
-            onClick={() => setFilter("active")}
-          >
-            Actifs ({clients.filter((c) => c.status !== "Archivé").length})
-          </button>
-          <button
-            type="button"
-            className={`clientTabBtn ${filter === "archived" ? "active" : ""}`}
-            style={filter === "archived" ? { background: "var(--acc)", color: "#ffffff" } : {}}
-            onClick={() => setFilter("archived")}
-          >
-            Archivés ({clients.filter((c) => c.status === "Archivé").length})
-          </button>
+          {(
+            [
+              ["ongoing", "En cours", clients.filter((c) => isOngoing(c.status)).length],
+              ["completed", "Terminés", clients.filter((c) => c.status === "Terminé").length],
+              ["archived", "Archivés", clients.filter((c) => c.status === "Archivé").length],
+              ["all", "Tous", clients.length],
+            ] as const
+          ).map(([id, label, n]) => (
+            <button key={id} type="button" className={`clientTabBtn ${filter === id ? "active" : ""}`} onClick={() => setFilter(id)}>
+              {label} ({n})
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Content: Table or Empty state */}
       <div className="clientsListCard">
+        <div className="catChips">
+          <button type="button" className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>
+            Toutes catégories <small>{countIn(() => true)}</small>
+          </button>
+          {CLIENT_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={category === cat.id ? "active" : ""}
+              onClick={() => setCategory(cat.id)}
+              style={{ ["--cat" as string]: cat.color }}
+            >
+              <span className="catDotSm" /> {cat.label} <small>{countIn((c) => c.category === cat.id)}</small>
+            </button>
+          ))}
+          <button type="button" className={category === "none" ? "active" : ""} onClick={() => setCategory("none")}>
+            Non classés <small>{countIn((c) => !c.category)}</small>
+          </button>
+        </div>
+
         {filteredClients.length === 0 ? (
           <div className="emptyClientsView">
             <div className="emptyIconCircle">
@@ -194,7 +223,14 @@ export function ClientsView({
                           <strong>
                             {c.first_name} {c.last_name}
                           </strong>
-                          <span className="clientSubMeta">Inscrit le {new Date(c.created_at).toLocaleDateString("fr-FR")}</span>
+                          <span className="clientSubMeta">
+                            {categoryOf(c.category) && (
+                              <span className="catBadge" style={{ ["--cat" as string]: categoryOf(c.category)!.color }}>
+                                {categoryOf(c.category)!.label}
+                              </span>
+                            )}
+                            Inscrit le {new Date(c.created_at).toLocaleDateString("fr-FR")}
+                          </span>
                         </div>
                       </div>
                     </td>
@@ -224,7 +260,18 @@ export function ClientsView({
 
                     <td style={{ textAlign: "right" }}>
                       <div className="clientRowActions">
-                        {can("clients.write") && (
+                        {can("clients.write") && c.status !== "Archivé" && (
+                          <button
+                            type="button"
+                            className="btnIconTiny"
+                            title={c.status === "Terminé" ? "Remettre en cours" : "Marquer comme terminé"}
+                            disabled={busy}
+                            onClick={(e) => toggleCompletion(e, c)}
+                          >
+                            {c.status === "Terminé" ? <RotateCcw size={14} /> : <CheckCircle2 size={14} />}
+                          </button>
+                        )}
+                        {can("clients.archive") && (
                           <button
                             type="button"
                             className="btnIconTiny danger"

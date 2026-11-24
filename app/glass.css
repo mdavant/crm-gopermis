@@ -610,9 +610,11 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 :root .kpiCard.kpiFeatured .kpiIconWrap { background: rgba(255, 255, 255, 0.2) !important; color: #fff !important; border-color: rgba(255, 255, 255, 0.35) !important; }
 .kpiFeatured .sparkline { position: absolute; right: 12px; bottom: 12px; opacity: 0.95; }
 
-@media (max-width: 1280px) {
+/* La carte bascule selon SA largeur (et non celle de l'écran). */
+.dashLeftColumn { container-type: inline-size; container-name: dashleft; }
+@container dashleft (max-width: 620px) {
   .dashHero { grid-template-columns: 1fr; }
-  .dashHeroOrbit { margin: 0 auto; }
+  .dashHeroOrbit { margin: -10px auto -14px; transform: scale(0.86); }
 }
 
 /* ==========================================================================
@@ -1379,3 +1381,25 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .importReport details { font-size: 12.5px; color: var(--ink-2); background: rgba(254,243,199,.55); border-radius: 12px; padding: 8px 12px; }
 .importReport summary { cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .importReport ul { margin: 6px 0 0; padding-left: 18px; max-height: 200px; overflow: auto; }
+
+/* Planning : séances placées à la minute près, chevauchements côte à côte */
+.calendarSlotCell { overflow: visible !important; }
+.dayEventsLayer { position: absolute; left: 0; right: 0; top: 0; z-index: 4; pointer-events: none; }
+.eventCard.placed {
+  position: absolute !important;
+  pointer-events: auto;
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 6px 8px !important;
+  overflow: hidden;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.eventCard.placed .eventCardTitle { font-size: 12px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eventCard.placed .eventCardTime { font-size: 11px; font-weight: 600; display: block; }
+.eventCard.placed .eventCardMeta { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+.eventCard.placed.compact { flex-direction: row; align-items: center; gap: 6px; padding: 3px 7px !important; }
+.eventCard.placed:hover { z-index: 3; }

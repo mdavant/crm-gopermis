@@ -670,6 +670,8 @@ export async function listBookings(
       conds.push("b.start_at < ?");
       params.push(endD);
     }
+    // Sans filtre : séances des 6 derniers mois et à venir (évite de tronquer les plus récentes).
+    if (!conds.length) conds.push("b.end_at >= (UTC_TIMESTAMP() - INTERVAL 180 DAY)");
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
     const rows = (await mysqlQuery(
       `SELECT b.*, b.start_at AS starts_at, b.end_at AS ends_at,
@@ -684,7 +686,7 @@ export async function listBookings(
        JOIN clients c ON c.id = b.client_id
        ${where}
        ORDER BY b.start_at ASC, b.id ASC
-       LIMIT 1000`,
+       LIMIT 5000`,
       params,
     )) as Record<string, unknown>[];
     return rows;

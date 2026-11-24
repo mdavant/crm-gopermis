@@ -64,6 +64,40 @@ export function IntervalFields() {
 
 const INSTRUCTOR_FALLBACK_COLORS = ["#e5484d", "#8e4ec6", "#12a594", "#3e7bfa", "#d6409f", "#e8833a", "#65a30d"];
 
+const HOUR_PX = 96;
+const isoDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (d: Date, n: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+};
+
+/** Répartit les séances qui se chevauchent en colonnes (comme un agenda). */
+function layoutDay(list: Booking[]) {
+  const sorted = [...list].sort((a, b) => a.starts_at.localeCompare(b.starts_at) || b.ends_at.localeCompare(a.ends_at));
+  const out: { b: Booking; col: number; cols: number }[] = [];
+  let cluster: { b: Booking; col: number }[] = [];
+  let clusterEnd = 0;
+  const flush = () => {
+    const cols = Math.max(1, ...cluster.map((c) => c.col + 1));
+    cluster.forEach((c) => out.push({ ...c, cols }));
+    cluster = [];
+  };
+  for (const b of sorted) {
+    const s = new Date(b.starts_at).getTime();
+    const e = new Date(b.ends_at).getTime();
+    if (cluster.length && s >= clusterEnd) flush();
+    const used = new Set(cluster.filter((c) => new Date(c.b.ends_at).getTime() > s).map((c) => c.col));
+    let col = 0;
+    while (used.has(col)) col++;
+    cluster.push({ b, col });
+    clusterEnd = Math.max(clusterEnd, e);
+  }
+  flush();
+  return out;
+}
+
 // Heure affichée dans la grille (08:00, 09:00…)
 function formatHourAMPM(hour: number): string {
   return `${hour.toString().padStart(2, "0")}:00`;
@@ -120,6 +154,7 @@ export function Schedule({
 
   // Current anchor date (defaults to selectedDate or today)
   const [currentDate, setCurrentDate] = useState<Date>(selectedDate ?? new Date());
+  const [windowAnchor, setWindowAnchor] = useState<Date>(() => new Date(selectedDate ?? new Date()));
 
   useEffect(() => {
     if (selectedDate) {
@@ -142,7 +177,12 @@ export function Schedule({
   const refresh = useCallback(async () => {
     try {
       const [b, r, cList] = await Promise.all([
-        api<Booking[]>("bookings" + (detail ? "?clientId=" + detail.client.id : "")),
+        api<Booking[]>(
+          "bookings" +
+            (detail
+              ? "?clientId=" + detail.client.id
+              : `?startDate=${isoDay(addDays(windowAnchor, -70))}&endDate=${isoDay(addDays(windowAnchor, 140))}`),
+        ),
         api<Resources>("resources"),
         api<ClientRecord[]>("clients").catch(() => []),
       ]);
@@ -152,11 +192,17 @@ export function Schedule({
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [detail]);
+  }, [detail, windowAnchor]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Recharge quand on navigue loin de la période chargée.
+  useEffect(() => {
+    const diff = (currentDate.getTime() - windowAnchor.getTime()) / 86400000;
+    if (diff < -50 || diff > 110) setWindowAnchor(new Date(currentDate));
+  }, [currentDate, windowAnchor]);
 
   // When client selection changes in modal, load their active services
   useEffect(() => {
@@ -258,7 +304,18 @@ export function Schedule({
   };
 
   // Hours displayed on the vertical axis (8 AM to 7 PM)
-  const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  // Plage affichée : 6h → 22h, élargie si une séance commence plus tôt ou finit plus tard.
+  const hours = useMemo(() => {
+    let first = 6;
+    let last = 21;
+    for (const b of rows) {
+      const s = new Date(b.starts_at);
+      const e = new Date(b.ends_at);
+      first = Math.min(first, s.getHours());
+      last = Math.max(last, e.getHours() - (e.getMinutes() === 0 ? 1 : 0));
+    }
+    return Array.from({ length: Math.max(1, last - first + 1) }, (_, i) => first + i);
+  }, [rows]);
 
   // Visual color palette for real bookings
 
@@ -589,7 +646,6 @@ export function Schedule({
                     <span className="hourText">{formatHourAMPM(hour)}</span>
                   </td>
                   {weekDays.map((day, dayIdx) => {
-                    const slotBookings = getBookingsForSlot(day, hour);
                     const isNowCell =
                       now.toDateString() === day.toDateString() && now.getHours() === hour;
                     const isTodayCol = now.toDateString() === day.toDateString();
@@ -599,71 +655,56 @@ export function Schedule({
                         key={dayIdx}
                         className={`calendarSlotCell ${isTodayCol ? "todaySlotCell" : ""}`}
                         onClick={() => {
-                          if (can("schedule.write") && slotBookings.length === 0) {
-                            handleSlotClick(day, hour);
-                          }
+                          if (can("schedule.write")) handleSlotClick(day, hour);
                         }}
                       >
                         {isNowCell && <NowLine now={now} />}
-                        {slotBookings.map((b) => {
-                          const palette = paletteFor(b);
-                          const durHours = Math.max(1, Math.round(b.minutes / 60));
-                          const spanStyle =
-                            durHours > 1
-                              ? { minHeight: `${durHours * 96 - 12}px`, zIndex: 5 }
-                              : {};
-
-                          const startH = timeFr(b.starts_at);
-                          const endH = timeFr(b.ends_at);
-
-                          return (
-                            <div
-                              key={b.id}
-                              className="eventCard"
-                              style={{
-                                background: palette.bg,
-                                borderColor: palette.border,
-                                ["--ev" as string]: palette.border,
-                                color: palette.text,
-                                ...spanStyle,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedBooking(b);
-                              }}
-                            >
-                              <div className="eventCardHeader">
-                                <span className="eventCardTitle" style={{ color: palette.text }}>
-                                  {b.first_name} {b.last_name}
-                                </span>
-                              </div>
-
-                              <div className="eventCardTime" style={{ color: palette.subtext }}>
-                                <Clock size={12} />
-                                <span>
-                                  {startH} - {endH}
-                                </span>
-                              </div>
-
-                              <div className="eventCardFooter">
-                                <div className="avatarCluster">
-                                  <div
-                                    className="miniAvatar"
-                                    style={{
-                                      backgroundColor: palette.avatarBg,
-                                      color: palette.avatarText,
-                                    }}
-                                  >
-                                    {b.first_name[0]}
-                                  </div>
-                                  <span className="avatarMoreText" style={{ color: palette.subtext }}>
-                                    {b.vehicle_label.split(" ")[0]}
+                        {hour === hours[0] && (
+                          <div className="dayEventsLayer" style={{ height: hours.length * HOUR_PX }}>
+                            {layoutDay(getBookingsForDay(day)).map(({ b, col, cols }) => {
+                              const palette = paletteFor(b);
+                              const s0 = new Date(b.starts_at);
+                              const e0 = new Date(b.ends_at);
+                              const top = ((s0.getHours() - hours[0]) * 60 + s0.getMinutes()) * (HOUR_PX / 60);
+                              const height = Math.max(26, ((e0.getTime() - s0.getTime()) / 60000) * (HOUR_PX / 60) - 4);
+                              const compact = height < 70;
+                              return (
+                                <div
+                                  key={b.id}
+                                  className={`eventCard placed ${compact ? "compact" : ""}`}
+                                  style={{
+                                    top: top + 2,
+                                    height,
+                                    left: `calc(${(col / cols) * 100}% + 3px)`,
+                                    width: `calc(${100 / cols}% - 6px)`,
+                                    background: palette.bg,
+                                    borderColor: palette.border,
+                                    ["--ev" as string]: palette.border,
+                                    color: palette.text,
+                                  }}
+                                  title={`${b.first_name} ${b.last_name} · ${timeFr(b.starts_at)}–${timeFr(b.ends_at)} · ${b.vehicle_label}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedBooking(b);
+                                  }}
+                                >
+                                  <span className="eventCardTitle" style={{ color: palette.text }}>
+                                    {b.first_name} {b.last_name}
                                   </span>
+                                  <span className="eventCardTime" style={{ color: palette.subtext }}>
+                                    {timeFr(b.starts_at)}–{timeFr(b.ends_at)}
+                                  </span>
+                                  {!compact && (
+                                    <span className="eventCardMeta" style={{ color: palette.subtext }}>
+                                      {b.vehicle_label}
+                                      {b.instructor_name ? ` · ${b.instructor_name}` : ""}
+                                    </span>
+                                  )}
                                 </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
                     );
                   })}
@@ -837,8 +878,8 @@ export function Schedule({
               <div className="bookingMetaItem">
                 <User size={16} />
                 <span>
-                  {selectedBooking.instructor_name ??
-                    "Accompagnateur : " + selectedBooking.companion_name}
+                  {selectedBooking.instructor_name ||
+                    (selectedBooking.companion_name ? `Accompagnateur : ${selectedBooking.companion_name}` : "Accompagnateur personnel")}
                 </span>
               </div>
             </div>

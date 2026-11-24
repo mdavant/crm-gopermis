@@ -363,7 +363,7 @@ export function Dashboard({
                         <div className="bookingDetailsRow">
                           <span>🚗 {b.vehicle_label}</span>
                           <span>
-                            👤 {b.instructor_name || "Accompagnateur : " + b.companion_name}
+                            👤 {b.instructor_name || (b.companion_name ? `Accompagnateur : ${b.companion_name}` : "Accompagnateur personnel")}
                           </span>
                         </div>
                       </div>

@@ -709,7 +709,7 @@ export function CalendarGrid() {
                   ENCADREMENT
                 </span>
                 <strong>
-                  {selectedBooking.instructor_name ?? `Accompagnateur : ${selectedBooking.companion_name}`}
+                  {selectedBooking.instructor_name || (selectedBooking.companion_name ? `Accompagnateur : ${selectedBooking.companion_name}` : "Accompagnateur personnel")}
                 </strong>
               </div>
             </div>

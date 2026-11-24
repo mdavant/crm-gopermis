@@ -1403,3 +1403,243 @@ label.dSearch { display: flex !important; flex-direction: row !important; align-
 .eventCard.placed .eventCardMeta { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .eventCard.placed.compact { flex-direction: row; align-items: center; gap: 6px; padding: 3px 7px !important; }
 .eventCard.placed:hover { z-index: 3; }
+
+/* ==========================================================================
+   Mobile first — moniteurs (≤ 760 px)
+   ========================================================================== */
+.mTabBar, .mSheetBackdrop { display: none; }
+
+@media (max-width: 760px) {
+  html, body { overscroll-behavior-y: none; }
+  :root .dockRail, :root .calendarSubPanel { display: none !important; }
+  :root .mainAppContent,
+  :root .mainAppContent.fullWidthView,
+  :root:not([data-theme="dark"]) .mainAppContent,
+  :root:not([data-theme="dark"]) .mainAppContent.fullWidthView {
+    margin-left: 0 !important; width: 100% !important; max-width: 100vw;
+    padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+    min-height: 100dvh;
+  }
+  .mainAppContent > .content > div[style] { padding: 14px 14px 0 !important; }
+
+  /* Barre d'onglets */
+  .mTabBar {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    position: fixed; z-index: 90; left: 10px; right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    height: 64px; padding: 6px; border-radius: 24px;
+    background: rgba(255, 250, 247, 0.78);
+    backdrop-filter: blur(22px) saturate(1.6); -webkit-backdrop-filter: blur(22px) saturate(1.6);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 14px 40px -12px rgba(120, 40, 25, 0.35), inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  .mTabBar button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    border: 0; background: transparent; color: #7a625b; border-radius: 18px;
+    font: 600 10.5px/1 inherit; letter-spacing: .01em; -webkit-tap-highlight-color: transparent;
+    transition: background .2s, color .2s, transform .15s;
+  }
+  .mTabBar button:active { transform: scale(.94); }
+  .mTabBar button.active { color: var(--acc); background: color-mix(in oklab, var(--acc) 13%, transparent); }
+
+  /* Feuille « Plus » */
+  .mSheetBackdrop {
+    display: block; position: fixed; inset: 0; z-index: 95;
+    background: rgba(40, 18, 12, 0.28); backdrop-filter: blur(3px);
+    animation: mFade .2s ease;
+  }
+  .mSheet {
+    position: absolute; left: 10px; right: 10px; bottom: calc(84px + env(safe-area-inset-bottom));
+    padding: 10px; border-radius: 24px; display: flex; flex-direction: column; gap: 2px;
+    background: rgba(255, 251, 249, 0.94); backdrop-filter: blur(24px);
+    box-shadow: 0 20px 50px -14px rgba(80, 25, 15, .45);
+    animation: mUp .26s cubic-bezier(.2,.9,.3,1.15);
+  }
+  .mSheetHead { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 12px; border-bottom: 1px solid rgba(120,60,45,.08); margin-bottom: 6px; }
+  .mSheetHead > button { border: 0; background: rgba(120,60,45,.07); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #5b4540; }
+  .mSheetUser { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .mSheetUser > span { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #fff; font-weight: 800; font-size: 14px; flex: none; }
+  .mSheetUser strong { display: block; font-size: 15px; color: #2a1814; }
+  .mSheetUser small { display: block; font-size: 12px; color: #8a716a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+  .mSheetItem { display: flex; align-items: center; gap: 14px; padding: 13px 12px; border: 0; background: transparent; border-radius: 14px; font: 600 15px/1.2 inherit; color: #3a2722; text-align: left; }
+  .mSheetItem:active { background: rgba(120,60,45,.07); }
+  .mSheetItem.danger { color: #c4343a; }
+  .mSheetAccent > * { margin: -6px 0; }
+  @keyframes mUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes mFade { from { opacity: 0; } }
+
+  /* Modales en feuille du bas */
+  .modalBackdrop { align-items: flex-end !important; padding: 0 !important; }
+  .modalBackdrop .modal {
+    width: 100% !important; max-width: 100% !important; max-height: 92dvh !important; overflow-y: auto;
+    border-radius: 26px 26px 0 0 !important; margin: 0 !important;
+    padding: 18px 16px calc(22px + env(safe-area-inset-bottom)) !important;
+    animation: mUp .28s cubic-bezier(.2,.9,.3,1.1) !important;
+  }
+  .modal .formGrid, .modal .formGrid.two, .modal .genGrid4 { grid-template-columns: 1fr !important; }
+  .modal .modalButtonsRow { position: sticky; bottom: -22px; background: inherit; padding-top: 10px; }
+  .modal .modalButtonsRow > * { flex: 1; min-height: 46px; }
+  input, select, textarea { font-size: 16px !important; } /* évite le zoom iOS */
+
+  /* Agenda du jour */
+  .calendarWorkspace { padding: 0 !important; }
+  .mAgenda { padding: calc(14px + env(safe-area-inset-top)) 14px 0; }
+  .mAgendaHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .mAgendaHead h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.03em; color: #2a1814; }
+  .mAgendaHead p { margin: 2px 0 0; color: #8a716a; font-size: 14px; font-weight: 600; }
+  .mAgendaNav { display: flex; gap: 6px; align-items: center; }
+  .mAgendaNav button { height: 38px; min-width: 38px; border-radius: 13px; border: 1px solid rgba(255,255,255,.9); background: rgba(255,255,255,.6); display: grid; place-items: center; color: #4a332d; font: 700 13px inherit; }
+  .mAgendaNav .mToday { padding: 0 12px; color: var(--acc); }
+  .mWeekStrip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding: 6px; border-radius: 22px; background: rgba(255,255,255,.5); border: 1px solid rgba(255,255,255,.85); box-shadow: 0 8px 24px -14px rgba(120,40,25,.3); }
+  .mDay { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 6px; border: 0; background: transparent; border-radius: 16px; color: #6d554f; -webkit-tap-highlight-color: transparent; transition: background .2s, color .2s; }
+  .mDay span { font-size: 11px; font-weight: 600; text-transform: capitalize; }
+  .mDay strong { font-size: 18px; font-weight: 800; color: #2a1814; }
+  .mDay i { font-style: normal; font-size: 10px; font-weight: 800; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px; }
+  .mDay i.has { background: color-mix(in oklab, var(--acc) 16%, transparent); color: var(--acc); }
+  .mDay.today strong { color: var(--acc); }
+  .mDay.sel { background: var(--acc); color: rgba(255,255,255,.85); box-shadow: 0 8px 18px -8px var(--acc); }
+  .mDay.sel strong { color: #fff; }
+  .mDay.sel i.has { background: rgba(255,255,255,.25); color: #fff; }
+  .mFocus { position: relative; display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding: 0 14px; height: 44px; border-radius: 15px; background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.9); color: #7a625b; }
+  .mFocus select { flex: 1; appearance: none; border: 0 !important; background: transparent !important; font-weight: 700 !important; color: #3a2722; height: 100%; padding: 0 !important; box-shadow: none !important; outline: none; }
+  .mFocus > svg:last-child { pointer-events: none; }
+  .mDayTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 18px 2px 10px; }
+  .mDayTitle h2 { margin: 0; font-size: 18px; font-weight: 800; color: #2a1814; }
+  .mDayTitle span { font-size: 13px; color: #8a716a; font-weight: 600; white-space: nowrap; }
+  .mList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .mCard { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px 12px 14px 0; border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,.9);
+    background: linear-gradient(90deg, color-mix(in oklab, var(--c) 14%, rgba(255,255,255,.75)), rgba(255,255,255,.7));
+    box-shadow: inset 5px 0 0 var(--c), 0 10px 26px -16px rgba(120,40,25,.35); -webkit-tap-highlight-color: transparent; transition: transform .15s; }
+  .mCard:active { transform: scale(.985); }
+  .mCard.past { opacity: .62; }
+  .mCard.now { box-shadow: inset 5px 0 0 var(--c), 0 0 0 2px color-mix(in oklab, var(--c) 55%, transparent), 0 12px 28px -14px var(--c); }
+  .mTime { width: 66px; flex: none; display: flex; flex-direction: column; align-items: center; padding-left: 6px; }
+  .mTime strong { font-size: 17px; font-weight: 800; color: #2a1814; font-variant-numeric: tabular-nums; }
+  .mTime span { font-size: 12.5px; color: #8a716a; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .mName { font-size: 16px; font-weight: 800; color: color-mix(in oklab, var(--c) 45%, #1c1210); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .mName em { font-style: normal; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 3px 7px; border-radius: 8px; background: var(--c); color: #fff; }
+  .mName em.exam { background: #f59e0b; }
+  .mMeta { font-size: 13px; color: #6d554f; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mMeta svg { flex: none; opacity: .7; }
+  .mChev { color: #b59e98; flex: none; }
+  .mEmpty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 46px 0; color: #a58d86; border-radius: 22px; border: 1.5px dashed rgba(120,60,45,.15); }
+  .mEmpty p { margin: 0; font-weight: 600; }
+  .mFab { position: fixed; z-index: 85; right: 18px; bottom: calc(88px + env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 20px; border: 0; display: grid; place-items: center; color: #fff; background: var(--acc); box-shadow: 0 14px 30px -10px var(--acc), inset 0 1px 0 rgba(255,255,255,.35); transition: transform .15s; }
+  .mFab:active { transform: scale(.92); }
+  .calendarAlert { margin: 10px 14px !important; }
+
+  /* Tableau de bord */
+  .dashboardWorkspace { padding: calc(16px + env(safe-area-inset-top)) 14px 0 !important; }
+  .dashboardHeader { flex-direction: column; align-items: stretch !important; gap: 12px !important; }
+  .dashTitle { font-size: 30px !important; }
+  .dashHeaderActions { display: grid !important; grid-template-columns: 1fr auto; gap: 8px !important; }
+  .dashHeaderActions > :not(.cmdTrigger):not(.btnPrimary) { display: none !important; }
+  .dashHeaderActions .cmdTrigger { min-width: 0; width: 100%; justify-content: flex-start; }
+  .dashHeaderActions .cmdTrigger span { display: inline !important; }
+  .dashMainGrid { grid-template-columns: 1fr !important; gap: 14px !important; }
+  .dashHero { padding: 20px !important; border-radius: 26px !important; }
+  .dashHeroOrbit { display: none !important; }
+  .kpiGrid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .kpiCard { padding: 14px !important; min-height: 0 !important; }
+  .kpiValue { font-size: 26px !important; }
+
+  /* Élèves : lignes en cartes */
+  .clientsWorkspace { padding: calc(16px + env(safe-area-inset-top)) 14px 0 !important; }
+  .clientsHeader { flex-direction: column; align-items: stretch !important; gap: 12px; }
+  .clientsMainTitle { font-size: 30px !important; }
+  .clientsSubtitle { display: none; }
+  .clientsHeader .btnPrimary { width: 100%; justify-content: center; }
+  .clientTabsRow { overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; }
+  .clientTabsRow > * { flex: none; white-space: nowrap; }
+  .catChips { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+  .catChips > * { flex: none; }
+  .clientsListCard { padding: 10px !important; }
+  .clientsTable thead { display: none; }
+  .clientsTable, .clientsTable tbody { display: block; width: 100%; }
+  .clientsTable tr.clientRowItem { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 10px; border-bottom: 1px solid rgba(120,60,45,.07); }
+  .clientsTable tr.clientRowItem > td { display: block; padding: 0 !important; border: 0 !important; }
+  .clientsTable tr.clientRowItem > td:first-child { flex: 1 1 100%; }
+  .clientsTable .sourceTag, .clientsTable .subEmail { display: none; }
+
+  /* Fiche élève */
+  .clientDetailHeader, .detailHeader { flex-direction: column; align-items: stretch !important; }
+  .hoursStrip { grid-template-columns: 1fr 1fr !important; }
+
+  /* Données / profil / admin */
+  .profileWorkspace, .adminWorkspace { padding: calc(16px + env(safe-area-inset-top)) 14px 0 !important; }
+}
+
+/* ==========================================================================
+   Drive — lasso, glisser fluide, annulation, mobile
+   ========================================================================== */
+.dScroll { position: relative; }
+.dDrive.lassoing { user-select: none; -webkit-user-select: none; }
+.dDrive.lassoing .dItem { pointer-events: none; }
+.dLasso { position: absolute; z-index: 5; pointer-events: none; border-radius: 6px;
+  background: color-mix(in oklab, var(--acc) 12%, transparent); border: 1.5px solid color-mix(in oklab, var(--acc) 60%, transparent); }
+.dDrive.dragging .dItem * { pointer-events: none; }
+.dDrive.dragging .dItem.sel { opacity: .45; }
+.dItem { transition: background .15s, box-shadow .2s, transform .2s, opacity .2s; }
+.dItem.drop { transform: scale(1.015); box-shadow: 0 0 0 2px var(--acc), 0 12px 26px -16px var(--acc) !important; background: color-mix(in oklab, var(--acc) 10%, rgba(255,255,255,.7)) !important; }
+.dTreeRow.drop, .dCrumb.drop, .dNav button.drop { box-shadow: inset 0 0 0 2px var(--acc); background: color-mix(in oklab, var(--acc) 10%, transparent); }
+.dTreeRow.drop { animation: dSpring 1s linear; }
+@keyframes dSpring { 0% { background-size: 0 100%; } }
+.dragGhost { display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 12px 28px -10px rgba(0,0,0,.45); }
+.dragGhost[data-count]::before { content: attr(data-count); display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: #fff; color: var(--acc); font-size: 11px; }
+.dToast { display: flex; align-items: center; gap: 14px; }
+.dToast button { border: 0; background: transparent; color: color-mix(in oklab, var(--acc) 55%, #fff); font: 800 13px var(--font-main); cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.dToast button:hover { background: rgba(255,255,255,.12); }
+.dMobileNav, .dSheetBackdrop { display: none; }
+
+@media (max-width: 760px) {
+  .mainAppContent > .content > div[style]:has(> .dDrive) { padding: 0 !important; }
+  .dDrive { display: block !important; height: auto !important; }
+  .dSide { display: none !important; }
+  .dMain { height: auto !important; min-height: calc(100dvh - 100px); border-radius: 0 !important; background: transparent !important; border: 0 !important; box-shadow: none !important; padding: calc(14px + env(safe-area-inset-top)) 14px 0 !important; backdrop-filter: none !important; }
+  .dMobileNav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 12px; padding: 0 14px; }
+  .dMobileNav button { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,.9); background: rgba(255,255,255,.55); color: var(--ink-2); font: 700 13px var(--font-main); }
+  .dMobileNav button.active { background: var(--ink); color: #fff; border-color: transparent; }
+  .dHead { flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+  .dHead h2, .dCrumb.current { font-size: 22px !important; }
+  .dCrumbs { overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; white-space: nowrap; }
+  .dTools { display: flex; gap: 8px; }
+  .dSearch { flex: 1; min-width: 0 !important; height: 44px; }
+  .dKinds { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; margin: 10px -14px 6px !important; padding: 0 14px; }
+  .dKinds button { flex: none; padding: 7px 13px !important; }
+  .dScroll { overflow: visible !important; margin: 0 !important; padding: 0 0 20px !important; }
+  .dRow { grid-template-columns: minmax(0,1fr) 72px 40px !important; min-height: 58px; padding: 0 4px !important; }
+  .dRow > .dCheck { display: none; }
+  .dDrive.selecting .dRow { grid-template-columns: 32px minmax(0,1fr) 72px 40px !important; }
+  .dDrive.selecting .dRow > .dCheck { display: grid; }
+  .dRow > :nth-child(3) { display: none !important; }
+  .dRow > :nth-child(4) { display: block !important; text-align: right; font-size: 12px; }
+  .dDrive.selecting .dRowHead { display: grid !important; }
+  .dRowHead { display: none !important; }
+  .dRowAct button { width: 38px; height: 38px; }
+  .dItem { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .dItem:active { background: rgba(255,255,255,.6); }
+  .dGrid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 10px !important; }
+  .dCardCheck { opacity: 0 !important; }
+  .dDrive.selecting .dCardCheck { opacity: 1 !important; }
+  .dSelBar.show { position: sticky; top: 8px; z-index: 6; height: 52px !important; border-radius: 18px; }
+  .dSelActions { overflow-x: auto; scrollbar-width: none; }
+  .dSelActions button span { display: none; }
+  .dSelActions button { padding: 9px !important; flex: none; }
+  .dSheetBackdrop { display: block; position: fixed; inset: 0; z-index: 940; background: rgba(40,18,12,.3); animation: mFade .2s; }
+  .dMenu.sheet { position: fixed !important; left: 10px !important; right: 10px !important; top: auto !important; bottom: calc(10px + env(safe-area-inset-bottom)) !important; width: auto !important; max-height: 75dvh; overflow-y: auto; z-index: 945; padding: 8px !important; border-radius: 22px !important; animation: mUp .26s cubic-bezier(.2,.9,.3,1.1) !important; }
+  .dMenu.sheet button { padding: 13px 12px !important; font-size: 15px !important; gap: 14px !important; }
+  .dMenu.sheet kbd { display: none; }
+  .dMenuTitle { padding: 10px 12px 12px; font-weight: 800; font-size: 14px; color: var(--ink); border-bottom: 1px solid rgba(120,60,45,.08); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dToast { bottom: calc(92px + env(safe-area-inset-bottom)) !important; max-width: calc(100vw - 28px); font-size: 13px; }
+  .dUploads { bottom: calc(90px + env(safe-area-inset-bottom)) !important; }
+}
+@media (min-width: 761px) { .dScroll { padding-bottom: 140px !important; } }
+/* Le style global « header » ne doit pas s'appliquer à l'en-tête du Drive */
+header.dHead { height: auto; min-height: 44px; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; padding: 0; position: static; z-index: auto; }
+@media (max-width: 760px) {
+  .dRowAct button { opacity: 1 !important; }
+  .dDrive.selecting .dRowAct button { opacity: 0 !important; pointer-events: none; }
+  .mainAppContent > .content > div[style] { padding-left: 0 !important; padding-right: 0 !important; }
+  .mainAppContent > .content > div[style]:not(:has(> .dDrive)) { padding: 14px 14px 0 !important; }
+}

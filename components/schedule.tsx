@@ -8,6 +8,7 @@ import {
   type ClientRecord,
 } from "../lib/api-types";
 import { Modal } from "./modal";
+import { useIsMobile } from "../lib/use-mobile";
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   CalendarDays,
   CheckCircle2,
   FileSignature,
+  ChevronDown,
 } from "lucide-react";
 
 export const displayDate = (value: string) =>
@@ -349,7 +351,20 @@ export function Schedule({
   };
 
   // Filtre « un seul moniteur / un seul véhicule »
-  const [focus, setFocus] = useState("all");
+  const [focus, setFocusState] = useState("all");
+  useEffect(() => {
+    try {
+      const f = localStorage.getItem("gopermis-plan-focus");
+      if (f) setFocusState(f);
+    } catch {}
+  }, []);
+  const setFocus = (f: string) => {
+    setFocusState(f);
+    try {
+      localStorage.setItem("gopermis-plan-focus", f);
+    } catch {}
+  };
+  const isMobile = useIsMobile();
   const matchesFocus = (b: Booking) =>
     focus === "all" ||
     (focus.startsWith("i:") && b.instructor_id === focus.slice(2)) ||
@@ -424,9 +439,168 @@ export function Schedule({
   // RS3 : accompagnement GoPermis uniquement.
   const personnelAllowed = selectedVehicle?.model_id !== "rs3";
 
+  function renderMobileAgenda() {
+    const start = new Date(currentDate);
+    const dow = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - dow);
+    start.setHours(0, 0, 0, 0);
+    const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    const list = [...getBookingsForDay(currentDate)].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const today = new Date().toDateString();
+    const hm = (v: string) => new Date(v).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const dayLabel = currentDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    const total = list.reduce((a, b) => a + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000, 0);
+    const shift = (n: number) => setCurrentDate(addDays(currentDate, n));
+    return (
+      <div className="mAgenda">
+        <div className="mAgendaHead">
+          <div>
+            <h1>Planning</h1>
+            <p>
+              {capitalizedMonth} {yearNumber}
+            </p>
+          </div>
+          <div className="mAgendaNav">
+            <button type="button" aria-label="Semaine précédente" onClick={() => shift(-7)}>
+              <ChevronLeft size={18} />
+            </button>
+            <button type="button" className="mToday" onClick={goToToday}>
+              Aujourd&apos;hui
+            </button>
+            <button type="button" aria-label="Semaine suivante" onClick={() => shift(7)}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="mWeekStrip"
+          onTouchStart={(e) => ((e.currentTarget as HTMLDivElement).dataset.x = String(e.touches[0].clientX))}
+          onTouchEnd={(e) => {
+            const x0 = Number((e.currentTarget as HTMLDivElement).dataset.x || 0);
+            const dx = e.changedTouches[0].clientX - x0;
+            if (Math.abs(dx) > 50) shift(dx < 0 ? 7 : -7);
+          }}
+        >
+          {days.map((d) => {
+            const n = getBookingsForDay(d).length;
+            const sel = d.toDateString() === currentDate.toDateString();
+            return (
+              <button
+                type="button"
+                key={d.toISOString()}
+                className={`mDay ${sel ? "sel" : ""} ${d.toDateString() === today ? "today" : ""}`}
+                onClick={() => setCurrentDate(d)}
+              >
+                <span>{d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").slice(0, 3)}</span>
+                <strong>{d.getDate()}</strong>
+                <i className={n ? "has" : ""}>{n > 0 ? n : ""}</i>
+              </button>
+            );
+          })}
+        </div>
+
+        <label className="mFocus">
+          <User size={15} />
+          <select value={focus} onChange={(e) => setFocus(e.target.value)} aria-label="Filtrer le planning">
+            <option value="all">Tout le planning</option>
+            {resources && resources.instructors.some((i) => i.active) && (
+              <optgroup label="Moniteur">
+                {resources.instructors
+                  .filter((i) => i.active)
+                  .map((i) => (
+                    <option key={i.id} value={"i:" + i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            {resources && resources.vehicles.some((v) => v.active) && (
+              <optgroup label="Véhicule">
+                {resources.vehicles
+                  .filter((v) => v.active)
+                  .map((v) => (
+                    <option key={v.id} value={"v:" + v.id}>
+                      {v.label}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            <optgroup label="Type de séance">
+              <option value="companion">Accompagnateur personnel</option>
+              <option value="exam">Examens pratiques</option>
+            </optgroup>
+          </select>
+          <ChevronDown size={15} />
+        </label>
+
+        <div className="mDayTitle">
+          <h2>{dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)}</h2>
+          <span>
+            {list.length} séance{list.length > 1 ? "s" : ""}
+            {total > 0 ? ` · ${Math.floor(total / 60)}h${String(Math.round(total % 60)).padStart(2, "0")}` : ""}
+          </span>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="mEmpty">
+            <CalendarDays size={28} />
+            <p>Aucune séance ce jour-là.</p>
+          </div>
+        ) : (
+          <ul className="mList">
+            {list.map((b) => {
+              const c = colorFor(b);
+              const past = new Date(b.ends_at).getTime() < Date.now();
+              const now = !past && new Date(b.starts_at).getTime() <= Date.now();
+              return (
+                <li key={b.id}>
+                  <button
+                    type="button"
+                    className={`mCard ${past ? "past" : ""} ${now ? "now" : ""}`}
+                    style={{ ["--c" as string]: c }}
+                    onClick={() => setSelectedBooking(b)}
+                  >
+                    <div className="mTime">
+                      <strong>{hm(b.starts_at)}</strong>
+                      <span>{hm(b.ends_at)}</span>
+                    </div>
+                    <div className="mBody">
+                      <div className="mName">
+                        {b.first_name} {b.last_name}
+                        {now && <em>En cours</em>}
+                        {isExam(b) && <em className="exam">Examen</em>}
+                      </div>
+                      <div className="mMeta">
+                        <Car size={13} /> {b.vehicle_label || "Véhicule"}
+                      </div>
+                      <div className="mMeta">
+                        <User size={13} />{" "}
+                        {b.instructor_name || (b.companion_name ? `Accompagnateur : ${b.companion_name}` : "Accompagnateur personnel")}
+                      </div>
+                    </div>
+                    <ChevronRight size={18} className="mChev" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {can("schedule.write") && (
+          <button type="button" className="mFab" aria-label="Nouvelle séance" onClick={() => handleSlotClick(currentDate, 10)}>
+            <Plus size={24} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="calendarWorkspace">
+      {isMobile && renderMobileAgenda()}
       {/* Top Header Bar matching reference image */}
+      {!isMobile && (<>
       <div className="calendarTopBar">
         <div className="calendarBreadcrumb">
           <span>Planning</span>
@@ -598,6 +772,8 @@ export function Schedule({
         </div>
       )}
 
+      </>)}
+
       {error && (
         <div className="calendarAlert errorAlert">
           <AlertCircle size={16} />
@@ -615,7 +791,7 @@ export function Schedule({
       )}
 
       {/* VIEW: WEEK (DEFAULT) */}
-      {calendarView === "Week" && (
+      {!isMobile && calendarView === "Week" && (
         <div className="calendarGridContainer">
           <table className="calendarTable">
             <thead>
@@ -716,7 +892,7 @@ export function Schedule({
       )}
 
       {/* VIEW: DAY */}
-      {calendarView === "Day" && (
+      {!isMobile && calendarView === "Day" && (
         <div className="calendarGridContainer dayViewContainer">
           <div className="dayViewHeader">
             <h2>
@@ -794,7 +970,7 @@ export function Schedule({
       )}
 
       {/* VIEW: MONTH */}
-      {calendarView === "Month" && (
+      {!isMobile && calendarView === "Month" && (
         <div className="calendarGridContainer monthViewContainer">
           <div className="monthGridHeader">
             <span>Lun</span>

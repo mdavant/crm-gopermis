@@ -25,7 +25,11 @@ import {
   Eye,
   Scissors,
   ClipboardPaste,
+  Plus,
+  CheckSquare,
 } from "lucide-react";
+import { useIsMobile } from "../lib/use-mobile";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api-types";
 import { previewToken } from "../lib/session";
 import { useApp } from "./app-context";
@@ -121,10 +125,17 @@ export function DriveView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [undo, setUndo] = useState<{ run: () => void } | null>(null);
+  const isMobile = useIsMobile();
+  const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const lassoBase = useRef<Set<string>>(new Set());
+  const justLassoed = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const longPress = useRef<{ t: ReturnType<typeof setTimeout> | null; fired: boolean }>({ t: null, fired: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastClicked = useRef<string | null>(null);
   const [clipboard, setClipboard] = useState<{ ids: string[]; mode: "copy" | "cut" } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; bg?: boolean } | null>(null);
   const [dialog, setDialog] = useState<
     | { kind: "folder" }
     | { kind: "rename"; item: Entry }
@@ -172,10 +183,13 @@ export function DriveView() {
   }, [layout]);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(""), 3200);
+    if (!toast) {
+      setUndo(null);
+      return;
+    }
+    const t = setTimeout(() => setToast(""), undo ? 6000 : 3200);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, undo]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const selItems = useMemo(() => items.filter((i) => selected.has(i.id)), [items, selected]);
@@ -184,6 +198,7 @@ export function DriveView() {
   async function run(fn: () => Promise<unknown>, success?: string) {
     try {
       await fn();
+      setUndo(null);
       if (success) setToast(success);
       await load();
       return true;
@@ -215,8 +230,93 @@ export function DriveView() {
   const clickItem = (e: React.MouseEvent, it: Entry) => {
     e.stopPropagation();
     setMenu(null);
+    if (longPress.current.fired) {
+      longPress.current.fired = false;
+      return;
+    }
+    // Ctrl/⌘ + clic : ajoute/retire ; Maj + clic : sélectionne la plage (comme Google Drive).
+    if (e.metaKey || e.ctrlKey || e.shiftKey || (isMobile && selected.size > 0)) {
+      toggleCheck(it, e.shiftKey);
+      return;
+    }
     open(it);
   };
+
+  /** Appui long (mobile) : passe en mode sélection. */
+  const touchProps = (it: Entry) => ({
+    onTouchStart: () => {
+      longPress.current.fired = false;
+      if (longPress.current.t) clearTimeout(longPress.current.t);
+      longPress.current.t = setTimeout(() => {
+        longPress.current.fired = true;
+        try {
+          navigator.vibrate?.(12);
+        } catch {}
+        setSelected((prev) => new Set(prev).add(it.id));
+        lastClicked.current = it.id;
+      }, 450);
+    },
+    onTouchMove: () => longPress.current.t && clearTimeout(longPress.current.t),
+    onTouchEnd: () => longPress.current.t && clearTimeout(longPress.current.t),
+  });
+
+  /* ---------------------------------------------- Sélection au lasso */
+
+  const onLassoDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || isMobile) return;
+    const t = e.target as HTMLElement;
+    if (t.closest(".dItem, button, input, a, .dRowHead")) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - box.left;
+    const y = e.clientY - box.top + e.currentTarget.scrollTop;
+    lassoBase.current = e.metaKey || e.ctrlKey || e.shiftKey ? new Set(selected) : new Set();
+    setLasso({ x0: x, y0: y, x1: x, y1: y });
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!lasso) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const move = (ev: MouseEvent) => {
+      const box = el.getBoundingClientRect();
+      const x1 = Math.max(0, Math.min(ev.clientX - box.left, box.width));
+      const y1 = ev.clientY - box.top + el.scrollTop;
+      // Défilement automatique près des bords
+      if (ev.clientY > box.bottom - 30) el.scrollTop += 14;
+      else if (ev.clientY < box.top + 30) el.scrollTop -= 14;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setLasso((l) => (l ? { ...l, x1, y1 } : l));
+        const left = Math.min(lasso.x0, x1) + box.left;
+        const right = Math.max(lasso.x0, x1) + box.left;
+        const top = Math.min(lasso.y0, y1) - el.scrollTop + box.top;
+        const bottom = Math.max(lasso.y0, y1) - el.scrollTop + box.top;
+        if (Math.abs(x1 - lasso.x0) + Math.abs(y1 - lasso.y0) < 6) return;
+        const next = new Set(lassoBase.current);
+        el.querySelectorAll<HTMLElement>(".dItem[data-id]").forEach((n) => {
+          const r = n.getBoundingClientRect();
+          if (r.right > left && r.left < right && r.bottom > top && r.top < bottom) next.add(n.dataset.id!);
+        });
+        setSelected(next);
+      });
+    };
+    const up = (ev: MouseEvent) => {
+      const box = el.getBoundingClientRect();
+      const moved = Math.abs(ev.clientX - box.left - lasso.x0) + Math.abs(ev.clientY - box.top + el.scrollTop - lasso.y0) > 6;
+      justLassoed.current = moved;
+      setLasso(null);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up, { once: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lasso?.x0, lasso?.y0]);
 
   /** Case à cocher : Maj+clic sélectionne toute la plage depuis la dernière case cochée. */
   const toggleCheck = (it: Entry, shift = false) => {
@@ -250,8 +350,43 @@ export function DriveView() {
     if (list.some((i) => i.type === "folder")) setToast("Les dossiers ne se téléchargent pas d'un bloc : ouvrez-les pour récupérer leurs fichiers.");
   };
 
-  const trash = (list: string[]) =>
-    run(() => api("drive2/trash", { ids: list }), `${list.length} élément${list.length > 1 ? "s" : ""} placé${list.length > 1 ? "s" : ""} dans la corbeille.`);
+  /** Retire tout de suite les éléments de l'écran (l'opération suit en arrière-plan). */
+  const hide = (list: string[]) => {
+    const gone = new Set(list);
+    setData((d) => (d ? { ...d, items: d.items.filter((i) => !gone.has(i.id)) } : d));
+    setSelected(new Set());
+  };
+  const trash = async (list: string[]) => {
+    hide(list);
+    const ok = await run(
+      () => api("drive2/trash", { ids: list }),
+      `${list.length} élément${list.length > 1 ? "s" : ""} placé${list.length > 1 ? "s" : ""} dans la corbeille.`,
+    );
+    if (ok) setUndo({ run: () => void run(() => api("drive2/restore", { ids: list }), "Éléments restaurés.") });
+    return ok;
+  };
+  /** Déplacement avec annulation possible (retour au dossier d'origine). */
+  const moveTo = async (list: string[], target: string | null) => {
+    const origin = new Map<string | null, string[]>();
+    for (const id of list) {
+      const it = items.find((i) => i.id === id);
+      if (!it || it.parentId === target) continue;
+      const k = it.parentId ?? null;
+      origin.set(k, [...(origin.get(k) ?? []), id]);
+    }
+    const moving = [...origin.values()].flat();
+    if (!moving.length) return;
+    hide(moving);
+    const name = target ? tree.find((t) => t.id === target)?.name ?? "le dossier" : "Mon Drive";
+    const ok = await run(() => api("drive2/move", { ids: moving, parentId: target, keepName: true }), `${moving.length} élément${moving.length > 1 ? "s" : ""} déplacé${moving.length > 1 ? "s" : ""} vers « ${name} ».`);
+    if (ok)
+      setUndo({
+        run: () =>
+          void run(async () => {
+            for (const [parent, ids2] of origin) await api("drive2/move", { ids: ids2, parentId: parent, keepName: true });
+          }, "Déplacement annulé."),
+      });
+  };
   const restore = (list: string[]) => run(() => api("drive2/restore", { ids: list }), "Éléments restaurés.");
   const purge = (list: string[]) => {
     if (!window.confirm(`Supprimer définitivement ${list.length} élément(s) ? Cette action est irréversible.`)) return;
@@ -268,7 +403,7 @@ export function DriveView() {
     void run(
       () =>
         clipboard.mode === "cut"
-          ? api("drive2/move", { ids: clipboard.ids, parentId: target })
+          ? api("drive2/move", { ids: clipboard.ids, parentId: target, keepName: true })
           : api("drive2/copy", { ids: clipboard.ids, parentId: target, keepName: false }),
       clipboard.mode === "cut" ? "Éléments déplacés." : "Éléments collés.",
     ).then((ok) => ok && clipboard.mode === "cut" && setClipboard(null));
@@ -404,10 +539,41 @@ export function DriveView() {
     const ghost = document.createElement("div");
     ghost.className = "dragGhost";
     ghost.textContent = list.length > 1 ? `${list.length} éléments` : it.name;
+    if (list.length > 1) ghost.dataset.count = String(list.length);
+    setDragging(true);
     document.body.appendChild(ghost);
     e.dataTransfer.setDragImage(ghost, 10, 10);
     setTimeout(() => ghost.remove(), 0);
   };
+
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    if (!dragging) return;
+    const end = () => {
+      setDragging(false);
+      setDropTarget(null);
+    };
+    window.addEventListener("dragend", end);
+    window.addEventListener("drop", end);
+    return () => {
+      window.removeEventListener("dragend", end);
+      window.removeEventListener("drop", end);
+    };
+  }, [dragging]);
+
+  // Dossier survolé pendant un glisser : il s'ouvre après un court instant (comme Google Drive).
+  useEffect(() => {
+    if (!dropTarget || dropTarget === "root" || dropTarget === (view === "folder" ? folderId : null)) return;
+    if (!tree.some((t) => t.id === dropTarget)) return;
+    const t = setTimeout(() => {
+      setView("folder");
+      setQ("");
+      setFolderId(dropTarget);
+      setDropTarget(null);
+    }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dropTarget]);
 
   const isInternal = (e: React.DragEvent) => e.dataTransfer.types.includes("application/x-gopermis-drive");
   const isExternal = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
@@ -422,6 +588,7 @@ export function DriveView() {
     },
     onDragLeave: (e: React.DragEvent) => {
       e.stopPropagation();
+      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
       setDropTarget((d) => (d === (target ?? "root") ? null : d));
     },
     onDrop: (e: React.DragEvent) => {
@@ -434,10 +601,8 @@ export function DriveView() {
       if (raw) {
         const list = (JSON.parse(raw) as string[]).filter((id) => id !== target);
         if (!list.length) return;
-        void run(
-          () => api(e.altKey ? "drive2/copy" : "drive2/move", { ids: list, parentId: target, keepName: true }),
-          e.altKey ? "Éléments copiés." : "Éléments déplacés.",
-        );
+        if (e.altKey) void run(() => api("drive2/copy", { ids: list, parentId: target, keepName: true }), "Éléments copiés.");
+        else void moveTo(list, target);
       } else if (e.dataTransfer.files.length) enqueue(e.dataTransfer.files, target);
     },
   });
@@ -521,13 +686,22 @@ export function DriveView() {
   };
   type Act = { key: string; label: string; icon: React.ComponentType<{ size?: number }>; run: () => void; danger?: boolean; kbd?: string };
   const actions = (actionsFor(selItems).filter(Boolean) as Act[]);
+  const bgActions = (
+    [
+      canWrite && view === "folder" && { key: "newf", label: "Nouveau dossier", icon: FolderPlus, run: () => setDialog({ kind: "folder" }) },
+      canWrite && !inTrash && { key: "up", label: "Importer des fichiers", icon: Upload, run: () => fileInput.current?.click() },
+      clipboard && canWrite && view === "folder" && { key: "paste", label: `Coller ${clipboard.ids.length} élément(s)`, icon: ClipboardPaste, kbd: "Ctrl V", run: paste },
+      items.length > 0 && { key: "all", label: "Tout sélectionner", icon: CheckSquare, kbd: "Ctrl A", run: () => setSelected(new Set(items.map((i) => i.id))) },
+    ].filter(Boolean) as Act[]
+  );
+  const menuActions = menu?.bg ? bgActions : actions;
 
   const pct = (j: UploadJob) => (j.size ? Math.round((j.sent / j.size) * 100) : 100);
   const activeUploads = uploads.filter((j) => j.status !== "done" || uploads.some((x) => x.status === "uploading"));
 
   return (
     <div
-      className="dDrive"
+      className={`dDrive ${dragging ? "dragging" : ""} ${selected.size ? "selecting" : ""} ${lasso ? "lassoing" : ""}`}
       onDragEnter={(e) => {
         if (isExternal(e) && canWrite && !inTrash) setExternalDrag(true);
       }}
@@ -591,6 +765,21 @@ export function DriveView() {
 
       {/* -------------------------------------------- Zone fichiers */}
       <section className="dMain" {...dropOn(currentTarget)}>
+        {/* Navigation compacte (téléphone) */}
+        <nav className="dMobileNav">
+          <button type="button" className={view === "folder" ? "active" : ""} onClick={() => goFolder(null)}>
+            <HardDrive size={15} /> Mon Drive
+          </button>
+          <button type="button" className={view === "recent" ? "active" : ""} onClick={() => { setQ(""); setView("recent"); }}>
+            <Clock3 size={15} /> Récents
+          </button>
+          <button type="button" className={view === "starred" ? "active" : ""} onClick={() => { setQ(""); setView("starred"); }}>
+            <Star size={15} /> Favoris
+          </button>
+          <button type="button" className={view === "trash" ? "active" : ""} onClick={() => { setQ(""); setView("trash"); }}>
+            <Trash2 size={15} /> Corbeille
+          </button>
+        </nav>
         <header className="dHead">
           <div className="dCrumbs">
             {title ? (
@@ -722,13 +911,35 @@ export function DriveView() {
 
         {/* Défilement indépendant */}
         <div
+          ref={scrollRef}
           className={`dScroll ${dropTarget === (currentTarget ?? "root") ? "drop" : ""}`}
-          onClick={() => setSelected(new Set())}
+          onMouseDown={onLassoDown}
+          onClick={() => {
+            if (justLassoed.current) {
+              justLassoed.current = false;
+              return;
+            }
+            setSelected(new Set());
+          }}
           onContextMenu={(e) => {
             if ((e.target as HTMLElement).closest(".dItem")) return;
             e.preventDefault();
+            if (isMobile) return;
+            setSelected(new Set());
+            setMenu({ x: e.clientX, y: e.clientY, bg: true });
           }}
         >
+          {lasso && (Math.abs(lasso.x1 - lasso.x0) + Math.abs(lasso.y1 - lasso.y0) > 6) && (
+            <div
+              className="dLasso"
+              style={{
+                left: Math.min(lasso.x0, lasso.x1),
+                top: Math.min(lasso.y0, lasso.y1),
+                width: Math.abs(lasso.x1 - lasso.x0),
+                height: Math.abs(lasso.y1 - lasso.y0),
+              }}
+            />
+          )}
           {loading && !data ? (
             <div className="dEmpty">
               <Loader2 size={22} className="spin" /> Chargement…
@@ -771,6 +982,8 @@ export function DriveView() {
               {items.map((it) => (
                 <div
                   key={it.id}
+                  data-id={it.id}
+                  {...touchProps(it)}
                   role="row"
                   className={`dRow dItem ${selected.has(it.id) ? "sel" : ""} ${dropTarget === it.id ? "drop" : ""} ${clipboard?.mode === "cut" && clipboard.ids.includes(it.id) ? "cut" : ""}`}
                   draggable={canWrite && !inTrash}
@@ -779,6 +992,7 @@ export function DriveView() {
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (isMobile) return;
                     if (!selected.has(it.id)) setSelected(new Set([it.id]));
                     setMenu({ x: e.clientX, y: e.clientY });
                   }}
@@ -816,6 +1030,8 @@ export function DriveView() {
               {items.map((it) => (
                 <div
                   key={it.id}
+                  data-id={it.id}
+                  {...touchProps(it)}
                   className={`dCard dItem ${selected.has(it.id) ? "sel" : ""} ${dropTarget === it.id ? "drop" : ""} ${clipboard?.mode === "cut" && clipboard.ids.includes(it.id) ? "cut" : ""}`}
                   draggable={canWrite && !inTrash}
                   onDragStart={(e) => onItemDragStart(e, it)}
@@ -823,6 +1039,7 @@ export function DriveView() {
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (isMobile) return;
                     if (!selected.has(it.id)) setSelected(new Set([it.id]));
                     setMenu({ x: e.clientX, y: e.clientY });
                   }}
@@ -876,13 +1093,19 @@ export function DriveView() {
       </section>
 
       {/* -------------------------------------------- Menu contextuel */}
-      {menu && actions.length > 0 && (
+      {menu &&
+        menuActions.length > 0 &&
+        createPortal(
+          <>
+      {menu && menuActions.length > 0 && isMobile && <div className="dSheetBackdrop" onClick={() => setMenu(null)} />}
+      {menu && menuActions.length > 0 && (
         <div
-          className="dMenu"
-          style={{ left: Math.min(menu.x, window.innerWidth - 240), top: Math.min(menu.y, window.innerHeight - actions.length * 38 - 20) }}
+          className={`dMenu ${isMobile ? "sheet" : ""}`}
+          style={isMobile ? undefined : { left: Math.min(menu.x, window.innerWidth - 240), top: Math.max(8, Math.min(menu.y, window.innerHeight - menuActions.length * 38 - 20)) }}
           onClick={(e) => e.stopPropagation()}
         >
-          {actions.map((a) => (
+          {isMobile && !menu.bg && selItems.length === 1 && <div className="dMenuTitle">{selItems[0].name}</div>}
+          {menuActions.map((a) => (
             <button
               key={a.key}
               type="button"
@@ -899,6 +1122,9 @@ export function DriveView() {
           ))}
         </div>
       )}
+          </>,
+          document.body,
+        )}
 
       {/* -------------------------------------------- Envois en cours */}
       {uploads.length > 0 && (
@@ -947,7 +1173,38 @@ export function DriveView() {
         </div>
       )}
 
-      {toast && <div className="dToast">{toast}</div>}
+      {toast && (
+        <div className="dToast">
+          <span>{toast}</span>
+          {undo && (
+            <button
+              type="button"
+              onClick={() => {
+                undo.run();
+                setUndo(null);
+                setToast("");
+              }}
+            >
+              Annuler
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bouton « + » (téléphone) */}
+      {isMobile && canWrite && !inTrash && selected.size === 0 && (
+        <button
+          type="button"
+          className="mFab"
+          aria-label="Ajouter"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenu({ x: 0, y: 0, bg: true });
+          }}
+        >
+          <Plus size={24} />
+        </button>
+      )}
 
       {/* -------------------------------------------- Fenêtres */}
       {dialog?.kind === "folder" && (
@@ -977,7 +1234,9 @@ export function DriveView() {
           onClose={() => setDialog(null)}
           onPick={(target) =>
             run(
-              () => api(dialog.kind === "move" ? "drive2/move" : "drive2/copy", { ids: dialog.ids, parentId: target, keepName: true }),
+              dialog.kind === "move"
+                ? () => moveTo(dialog.ids, target)
+                : () => api("drive2/copy", { ids: dialog.ids, parentId: target, keepName: true }),
               dialog.kind === "move" ? "Éléments déplacés." : "Éléments copiés.",
             )
           }

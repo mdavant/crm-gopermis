@@ -8,6 +8,8 @@ import {
   HardDrive,
   Database,
   ShieldCheck,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
 import {
   api,
@@ -56,6 +58,7 @@ export default function Home() {
   const [create, setCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
+  const [moreOpen, setMoreOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<string[]>(["confirmed", "completed"]);
 
   const toggleFilter = (id: string) => {
@@ -428,6 +431,97 @@ export default function Home() {
           )}
         </div>
       </main>
+
+      {/* Barre d'onglets mobile */}
+      <nav className="mTabBar" aria-label="Navigation principale">
+        {(
+          [
+            ["Accueil", HomeIcon, "Accueil"],
+            ["Planning", CalendarDays, "Planning"],
+            ["Clients", Users, "Élèves"],
+            ["Drive", HardDrive, "Drive"],
+          ] as const
+        ).map(([v, Icon, label]) => (
+          <button
+            key={v}
+            type="button"
+            className={view === v ? "active" : ""}
+            onClick={() => {
+              setView(v);
+              setDetail(null);
+              setMoreOpen(false);
+            }}
+          >
+            <Icon size={21} />
+            <span>{label}</span>
+          </button>
+        ))}
+        <button type="button" className={moreOpen || ["Donnees", "Profil", "AdminPanel"].includes(view) ? "active" : ""} onClick={() => setMoreOpen((o) => !o)}>
+          <MoreHorizontal size={21} />
+          <span>Plus</span>
+        </button>
+      </nav>
+      {moreOpen && (
+        <div className="mSheetBackdrop" onClick={() => setMoreOpen(false)}>
+          <div className="mSheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mSheetHead">
+              <div className="mSheetUser">
+                <span>{user.name.slice(0, 2).toUpperCase()}</span>
+                <div>
+                  <strong>{user.name}</strong>
+                  <small>{user.email}</small>
+                </div>
+              </div>
+              <button type="button" aria-label="Fermer" onClick={() => setMoreOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            {(
+              [
+                ["Profil", UserCircle2, "Mon profil", true],
+                ["Donnees", Database, "Tarifs & véhicules", true],
+                ["AdminPanel", ShieldCheck, "Panel admin", isAdmin],
+              ] as const
+            )
+              .filter((x) => x[3])
+              .map(([v, Icon, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  className="mSheetItem"
+                  onClick={() => {
+                    setView(v);
+                    setDetail(null);
+                    setMoreOpen(false);
+                  }}
+                >
+                  <Icon size={19} /> {label}
+                </button>
+              ))}
+            <div className="mSheetItem mSheetAccent">
+              <ThemeToggle compact /> Couleur de l&apos;interface
+            </div>
+            <button
+              type="button"
+              className="mSheetItem danger"
+              onClick={async () => {
+                setMoreOpen(false);
+                try {
+                  await api("logout", {});
+                  clearPreviewSession();
+                  setUser(null);
+                  setDetail(null);
+                  setRows([]);
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              <LogOut size={19} /> Se déconnecter
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* New Client Modal */}
       {create && (

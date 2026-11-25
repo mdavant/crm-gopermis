@@ -9,6 +9,9 @@ import {
 } from "../lib/api-types";
 import { Modal } from "./modal";
 import { useIsMobile } from "../lib/use-mobile";
+import { createPortal } from "react-dom";
+import { useApp } from "./app-context";
+import { MobileTopBar } from "./mobile-shell";
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,7 +23,8 @@ import {
   CalendarDays,
   CheckCircle2,
   FileSignature,
-  ChevronDown,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 
 export const displayDate = (value: string) =>
@@ -135,7 +139,9 @@ export function Schedule({
   selectedDate,
   onDateChange,
   activeFilters,
+  newBookingToken,
 }: {
+  newBookingToken?: number;
   can: (p: string) => boolean;
   detail?: Detail;
   reload?: () => Promise<void>;
@@ -365,6 +371,30 @@ export function Schedule({
     } catch {}
   };
   const isMobile = useIsMobile();
+  const { user } = useApp();
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Téléphone : se place automatiquement sur l'heure actuelle ou la première séance du jour.
+  const scrolledFor = React.useRef("");
+  useEffect(() => {
+    if (!isMobile || !rows.length) return;
+    const key = currentDate.toDateString();
+    if (scrolledFor.current === key) return;
+    scrolledFor.current = key;
+    const t = setTimeout(() => {
+      const target = document.querySelector<HTMLElement>(".mTimeline .mNow") ?? document.querySelector<HTMLElement>(".mTimeline .mEvent");
+      if (!target) return window.scrollTo({ top: 0, behavior: "smooth" });
+      const y = target.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.35;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [isMobile, rows.length, currentDate]);
+  // Ouvre directement le formulaire « Nouvelle séance » (depuis l'accueil).
+  useEffect(() => {
+    if (!newBookingToken) return;
+    const d = new Date();
+    setPrefilledSlot({ date: isoDay(d), hour: Math.max(8, Math.min(19, d.getHours() + 1)) });
+    setBookingModalOpen(true);
+  }, [newBookingToken]);
   const matchesFocus = (b: Booking) =>
     focus === "all" ||
     (focus.startsWith("i:") && b.instructor_id === focus.slice(2)) ||
@@ -446,32 +476,69 @@ export function Schedule({
     start.setHours(0, 0, 0, 0);
     const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
     const list = [...getBookingsForDay(currentDate)].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    const today = new Date().toDateString();
+    const isToday = currentDate.toDateString() === new Date().toDateString();
     const hm = (v: string) => new Date(v).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-    const dayLabel = currentDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
     const total = list.reduce((a, b) => a + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000, 0);
-    const shift = (n: number) => setCurrentDate(addDays(currentDate, n));
+    const shiftDay = (n: number) => setCurrentDate(addDays(currentDate, n));
+    const dayTitle = isToday
+      ? "Aujourd'hui"
+      : currentDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" }).replace(/^./, (c) => c.toUpperCase());
+
+    // Plage horaire de la journée : 7h–20h, étendue aux séances.
+    const HP = 68;
+    let h0 = 7;
+    let h1 = 20;
+    for (const b of list) {
+      const a = new Date(b.starts_at);
+      const z = new Date(b.ends_at);
+      h0 = Math.min(h0, a.getHours());
+      h1 = Math.max(h1, z.getHours() + (z.getMinutes() ? 1 : 0));
+    }
+    h1 = Math.min(24, h1);
+    const minsOf = (d: Date) => d.getHours() * 60 + d.getMinutes();
+    const yOf = (d: Date) => ((minsOf(d) - h0 * 60) / 60) * HP;
+    const nowY = isToday ? yOf(now) : -1;
+    const focusLabel =
+      focus === "all"
+        ? null
+        : user?.instructorId && focus === "i:" + user.instructorId
+          ? "Mes séances"
+          : focus === "companion"
+            ? "Accompagnateur personnel"
+            : focus === "exam"
+              ? "Examens pratiques"
+              : focus.startsWith("i:")
+                ? resources?.instructors.find((x) => x.id === focus.slice(2))?.name
+                : resources?.vehicles.find((x) => x.id === focus.slice(2))?.label;
+
     return (
       <div className="mAgenda">
-        <div className="mAgendaHead">
-          <div>
-            <h1>Planning</h1>
-            <p>
-              {capitalizedMonth} {yearNumber}
-            </p>
-          </div>
-          <div className="mAgendaNav">
-            <button type="button" aria-label="Semaine précédente" onClick={() => shift(-7)}>
-              <ChevronLeft size={18} />
-            </button>
-            <button type="button" className="mToday" onClick={goToToday}>
-              Aujourd&apos;hui
-            </button>
-            <button type="button" aria-label="Semaine suivante" onClick={() => shift(7)}>
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </div>
+        <MobileTopBar
+          title="Planning"
+          subtitle={`${capitalizedMonth} ${yearNumber}`}
+          right={
+            <>
+              <button
+                type="button"
+                className={`mIconBtn ${focus !== "all" ? "on" : ""}`}
+                aria-label="Filtrer"
+                onClick={() => setFilterOpen(true)}
+              >
+                <SlidersHorizontal size={18} />
+              </button>
+              {can("schedule.write") && (
+                <button
+                  type="button"
+                  className="mIconBtn mAccentBtn"
+                  aria-label="Nouvelle séance"
+                  onClick={() => handleSlotClick(currentDate, Math.max(8, Math.min(19, new Date().getHours() + 1)))}
+                >
+                  <Plus size={20} />
+                </button>
+              )}
+            </>
+          }
+        />
 
         <div
           className="mWeekStrip"
@@ -479,7 +546,7 @@ export function Schedule({
           onTouchEnd={(e) => {
             const x0 = Number((e.currentTarget as HTMLDivElement).dataset.x || 0);
             const dx = e.changedTouches[0].clientX - x0;
-            if (Math.abs(dx) > 50) shift(dx < 0 ? 7 : -7);
+            if (Math.abs(dx) > 50) setCurrentDate(addDays(currentDate, dx < 0 ? 7 : -7));
           }}
         >
           {days.map((d) => {
@@ -489,109 +556,143 @@ export function Schedule({
               <button
                 type="button"
                 key={d.toISOString()}
-                className={`mDay ${sel ? "sel" : ""} ${d.toDateString() === today ? "today" : ""}`}
+                className={`mDay ${sel ? "sel" : ""} ${d.toDateString() === new Date().toDateString() ? "today" : ""}`}
                 onClick={() => setCurrentDate(d)}
               >
                 <span>{d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").slice(0, 3)}</span>
                 <strong>{d.getDate()}</strong>
-                <i className={n ? "has" : ""}>{n > 0 ? n : ""}</i>
+                <i className={n ? "has" : ""} />
               </button>
             );
           })}
         </div>
 
-        <label className="mFocus">
-          <User size={15} />
-          <select value={focus} onChange={(e) => setFocus(e.target.value)} aria-label="Filtrer le planning">
-            <option value="all">Tout le planning</option>
-            {resources && resources.instructors.some((i) => i.active) && (
-              <optgroup label="Moniteur">
-                {resources.instructors
-                  .filter((i) => i.active)
-                  .map((i) => (
-                    <option key={i.id} value={"i:" + i.id}>
-                      {i.name}
-                    </option>
-                  ))}
-              </optgroup>
+        <div className="mDayBar">
+          <div>
+            <h2>{dayTitle}</h2>
+            <span>
+              {list.length ? `${list.length} séance${list.length > 1 ? "s" : ""} · ${Math.floor(total / 60)}h${String(Math.round(total % 60)).padStart(2, "0")}` : "Aucune séance"}
+            </span>
+          </div>
+          <div className="mDayNav">
+            <button type="button" aria-label="Jour précédent" onClick={() => shiftDay(-1)}>
+              <ChevronLeft size={17} />
+            </button>
+            {!isToday && (
+              <button type="button" className="mTodayPill" onClick={goToToday}>
+                Auj.
+              </button>
             )}
-            {resources && resources.vehicles.some((v) => v.active) && (
-              <optgroup label="Véhicule">
-                {resources.vehicles
-                  .filter((v) => v.active)
-                  .map((v) => (
-                    <option key={v.id} value={"v:" + v.id}>
-                      {v.label}
-                    </option>
-                  ))}
-              </optgroup>
-            )}
-            <optgroup label="Type de séance">
-              <option value="companion">Accompagnateur personnel</option>
-              <option value="exam">Examens pratiques</option>
-            </optgroup>
-          </select>
-          <ChevronDown size={15} />
-        </label>
-
-        <div className="mDayTitle">
-          <h2>{dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)}</h2>
-          <span>
-            {list.length} séance{list.length > 1 ? "s" : ""}
-            {total > 0 ? ` · ${Math.floor(total / 60)}h${String(Math.round(total % 60)).padStart(2, "0")}` : ""}
-          </span>
+            <button type="button" aria-label="Jour suivant" onClick={() => shiftDay(1)}>
+              <ChevronRight size={17} />
+            </button>
+          </div>
         </div>
 
-        {list.length === 0 ? (
-          <div className="mEmpty">
-            <CalendarDays size={28} />
-            <p>Aucune séance ce jour-là.</p>
-          </div>
-        ) : (
-          <ul className="mList">
-            {list.map((b) => {
-              const c = colorFor(b);
-              const past = new Date(b.ends_at).getTime() < Date.now();
-              const now = !past && new Date(b.starts_at).getTime() <= Date.now();
-              return (
-                <li key={b.id}>
-                  <button
-                    type="button"
-                    className={`mCard ${past ? "past" : ""} ${now ? "now" : ""}`}
-                    style={{ ["--c" as string]: c }}
-                    onClick={() => setSelectedBooking(b)}
-                  >
-                    <div className="mTime">
-                      <strong>{hm(b.starts_at)}</strong>
-                      <span>{hm(b.ends_at)}</span>
-                    </div>
-                    <div className="mBody">
-                      <div className="mName">
-                        {b.first_name} {b.last_name}
-                        {now && <em>En cours</em>}
-                        {isExam(b) && <em className="exam">Examen</em>}
-                      </div>
-                      <div className="mMeta">
-                        <Car size={13} /> {b.vehicle_label || "Véhicule"}
-                      </div>
-                      <div className="mMeta">
-                        <User size={13} />{" "}
-                        {b.instructor_name || (b.companion_name ? `Accompagnateur : ${b.companion_name}` : "Accompagnateur personnel")}
-                      </div>
-                    </div>
-                    <ChevronRight size={18} className="mChev" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {can("schedule.write") && (
-          <button type="button" className="mFab" aria-label="Nouvelle séance" onClick={() => handleSlotClick(currentDate, 10)}>
-            <Plus size={24} />
+        {focusLabel && (
+          <button type="button" className="mFocusChip" onClick={() => setFocus("all")}>
+            {focusLabel} <X size={13} />
           </button>
         )}
+
+        <div
+          className="mTimeline"
+          style={{ height: (h1 - h0) * HP + 12 }}
+          onClick={(e) => {
+            if (!can("schedule.write") || (e.target as HTMLElement).closest(".mEvent")) return;
+            const r = e.currentTarget.getBoundingClientRect();
+            const hour = h0 + Math.floor((e.clientY - r.top) / HP);
+            handleSlotClick(currentDate, Math.max(0, Math.min(23, hour)));
+          }}
+        >
+          {Array.from({ length: h1 - h0 + 1 }, (_, k) => (
+            <div key={k} className="mHour" style={{ top: k * HP }}>
+              <span>{String(h0 + k).padStart(2, "0")}:00</span>
+            </div>
+          ))}
+          {nowY >= 0 && nowY <= (h1 - h0) * HP && (
+            <div className="mNow" style={{ top: nowY }}>
+              <span>{now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
+          )}
+          {layoutDay(list).map(({ b, col, cols }) => {
+            const a = new Date(b.starts_at);
+            const z = new Date(b.ends_at);
+            const top = yOf(a);
+            const height = Math.max(40, ((z.getTime() - a.getTime()) / 3600000) * HP - 4);
+            const c = colorFor(b);
+            const past = z.getTime() < now.getTime();
+            const live = !past && a.getTime() <= now.getTime();
+            const who = b.instructor_name || (b.companion_name ? `Acc. ${b.companion_name}` : "Accompagnateur perso");
+            return (
+              <button
+                key={b.id}
+                type="button"
+                className={`mEvent ${past ? "past" : ""} ${live ? "live" : ""} ${height < 64 ? "short" : ""}`}
+                style={{
+                  top,
+                  height,
+                  left: `calc(54px + (100% - 58px) * ${col} / ${cols})`,
+                  width: `calc((100% - 58px) / ${cols} - 4px)`,
+                  ["--c" as string]: c,
+                }}
+                onClick={() => setSelectedBooking(b)}
+              >
+                <strong>
+                  {b.first_name} {b.last_name}
+                </strong>
+                <span className="mEvTime">
+                  {hm(b.starts_at)} – {hm(b.ends_at)}
+                  {live && <em>En cours</em>}
+                  {isExam(b) && <em className="exam">Examen</em>}
+                </span>
+                {height >= 64 && (
+                  <span className="mEvMeta">
+                    {b.vehicle_label || "Véhicule"}
+                    {cols < 3 ? ` · ${who}` : ""}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {filterOpen &&
+          createPortal(
+            <div className="mSheetBg" onClick={() => setFilterOpen(false)}>
+              <div className="mBottomSheet" onClick={(e) => e.stopPropagation()}>
+                <div className="mGrab" />
+                <h3>Afficher</h3>
+                <div className="mFilterList">
+                  {(
+                    [
+                      ["all", "Tout le planning", null],
+                      ...(user?.instructorId ? [["i:" + user.instructorId, "Mes séances", instructorColor(user.instructorId)]] : []),
+                      ...(resources?.instructors.filter((x) => x.active && x.id !== user?.instructorId).map((x) => ["i:" + x.id, x.name, instructorColor(x.id)]) ?? []),
+                      ["companion", "Accompagnateur personnel", planningColors.companion],
+                      ["exam", "Examens pratiques", planningColors.exam],
+                      ...(resources?.vehicles.filter((v) => v.active).map((v) => ["v:" + v.id, v.label, "vehicle"]) ?? []),
+                    ] as [string, string, string | null][]
+                  ).map(([id, label, color]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={focus === id ? "active" : ""}
+                      onClick={() => {
+                        setFocus(id);
+                        setFilterOpen(false);
+                      }}
+                    >
+                      {color === "vehicle" ? <Car size={16} /> : color ? <span className="planDot" style={{ background: color }} /> : <CalendarDays size={16} />}
+                      <span>{label}</span>
+                      {focus === id && <CheckCircle2 size={17} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
       </div>
     );
   }

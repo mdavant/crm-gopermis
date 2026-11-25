@@ -156,6 +156,27 @@ export async function updatePlanningColors(raw: unknown, actor: string) {
   return { ok: true };
 }
 
+/** Moniteur rattaché à un compte (lien direct, sinon même e-mail, sinon même nom). */
+export async function instructorIdForUser(u: { id: string; email?: string; name?: string }): Promise<string | null> {
+  try {
+    if (isMysqlMode()) {
+      const rows = (await mysqlQuery(
+        `SELECT id FROM instructors WHERE active = 1 AND (user_id = ? OR (email IS NOT NULL AND email <> '' AND LOWER(email) = LOWER(?)) OR LOWER(name) = LOWER(?))
+         ORDER BY (user_id = ?) DESC LIMIT 1`,
+        [u.id, u.email ?? "", u.name ?? "", u.id],
+      )) as { id: string }[];
+      return rows[0]?.id ?? null;
+    }
+    const r = await db().query(
+      `SELECT id FROM instructors WHERE active AND (user_id::text = $1 OR LOWER(name) = LOWER($2)) LIMIT 1`,
+      [u.id, u.name ?? ""],
+    );
+    return (r.rows[0]?.id as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function resources() {
   if (isMysqlMode()) {
     const [vehicles, instructors, blocks, policy] = await Promise.all([

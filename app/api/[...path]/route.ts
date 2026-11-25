@@ -44,6 +44,7 @@ import {
   listBookings,
   createBooking,
   completeBooking,
+  instructorIdForUser,
 } from "../../../server/scheduling";
 import { setupStatus, setupAccount } from "../../../server/setup";
 import {
@@ -114,8 +115,10 @@ async function handle(
     if (route === "auth/register" && isPost) return NextResponse.json(await registerAccount(await json(), req), {status:201});
     if ((route === "logout" || route === "auth/logout") && isPost) return NextResponse.json(await logoutAccount());
     if (route === "auth/password" && isPost) return NextResponse.json(await changePassword(await json()));
-    if (route === "me" && !isPost)
-      return NextResponse.json(await requireUser(undefined, { allowPendingPassword: true }));
+    if (route === "me" && !isPost) {
+      const me = await requireUser(undefined, { allowPendingPassword: true });
+      return NextResponse.json({ ...me, instructorId: await instructorIdForUser(me) });
+    }
     if (route === "me/update" && isPost) {
       const u = await requireUser();
       const body = z.object({ name:z.string().trim().min(1).max(150), password:z.string().min(14).max(256).optional(), currentPassword:z.string().max(256).optional() }).strict().parse(await json());

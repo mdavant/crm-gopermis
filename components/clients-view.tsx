@@ -12,6 +12,8 @@ import {
 import { api, type ClientRecord } from "../lib/api-types";
 import { CLIENT_CATEGORIES, categoryOf, isOngoing } from "../lib/client-categories";
 import { CheckCircle2, RotateCcw } from "lucide-react";
+import { useIsMobile } from "../lib/use-mobile";
+import { MobileTopBar } from "./mobile-shell";
 
 interface ClientsViewProps {
   clients: ClientRecord[];
@@ -36,6 +38,7 @@ export function ClientsView({
   const [category, setCategory] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const isMobile = useIsMobile();
 
   const inTab = (c: ClientRecord) =>
     filter === "ongoing" ? isOngoing(c.status) : filter === "completed" ? c.status === "Terminé" : filter === "archived" ? c.status === "Archivé" : true;
@@ -77,6 +80,95 @@ export function ClientsView({
       setBusy(false);
     }
   };
+
+  if (isMobile)
+    return (
+      <div className="mClients">
+        <MobileTopBar
+          title="Élèves"
+          subtitle={`${filteredClients.length} dossier${filteredClients.length > 1 ? "s" : ""}`}
+          right={
+            can("clients.write") && (
+              <button type="button" className="mIconBtn mAccentBtn" aria-label="Nouvel élève" onClick={onNewClient}>
+                <Plus size={20} />
+              </button>
+            )
+          }
+        />
+        <label className="mSearchField">
+          <Search size={17} />
+          <input type="search" placeholder="Nom, téléphone, e-mail…" value={q} onChange={(e) => onSearchChange(e.target.value)} />
+        </label>
+        <div className="mSegment">
+          {(
+            [
+              ["ongoing", "En cours"],
+              ["completed", "Terminés"],
+              ["archived", "Archivés"],
+              ["all", "Tous"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} type="button" className={filter === id ? "active" : ""} onClick={() => setFilter(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mChips">
+          <button type="button" className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>
+            Toutes <small>{countIn(() => true)}</small>
+          </button>
+          {CLIENT_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={category === cat.id ? "active" : ""}
+              onClick={() => setCategory(cat.id)}
+              style={{ ["--cat" as string]: cat.color }}
+            >
+              <span className="catDotSm" /> {cat.label} <small>{countIn((c) => c.category === cat.id)}</small>
+            </button>
+          ))}
+        </div>
+        {error && <p className="genWarn error">{error}</p>}
+        {filteredClients.length === 0 ? (
+          <div className="mEmpty">
+            <Users size={28} />
+            <p>{q ? "Aucun élève trouvé" : "Aucun élève dans cette liste"}</p>
+          </div>
+        ) : (
+          <ul className="mClientList">
+            {filteredClients.map((c) => {
+              const cat = categoryOf(c.category);
+              return (
+                <li key={c.id}>
+                  <div className="mClientRow" role="button" tabIndex={0} onClick={() => onSelectClient(c.id)}>
+                    <span className="mAvatar" style={{ ["--cat" as string]: cat?.color ?? "var(--acc)" }}>
+                      {c.first_name[0]}
+                      {c.last_name[0]}
+                    </span>
+                    <span className="mClientBody">
+                      <strong>
+                        {c.first_name} {c.last_name}
+                      </strong>
+                      <small>
+                        {cat ? <span className="mCatTxt" style={{ ["--cat" as string]: cat.color }}>{cat.label}</span> : null}
+                        {c.status !== "Actif" && c.status !== "En cours" ? ` · ${c.status}` : ""}
+                      </small>
+                    </span>
+                    {c.phone && (
+                      <a className="mCallBtn" href={`tel:${c.phone.replace(/\s/g, "")}`} onClick={(e) => e.stopPropagation()} aria-label={`Appeler ${c.first_name}`}>
+                        <Phone size={16} />
+                      </a>
+                    )}
+                    <ChevronRight size={18} className="mChev" />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    );
 
   return (
     <div className="clientsWorkspace">

@@ -18,6 +18,8 @@ import type { Booking, ClientRecord, Resources, User, HomeStats } from "../lib/a
 
 import { DashboardHero, Sparkline, dailyCounts } from "./dashboard-hero";
 import { CommandPaletteTrigger } from "./command-palette";
+import { useIsMobile } from "../lib/use-mobile";
+import { MobileTopBar, MobileSearchButton } from "./mobile-shell";
 
 interface DashboardProps {
   user: User;
@@ -64,6 +66,10 @@ export function Dashboard({
       bDate.getFullYear() === now.getFullYear()
     );
   });
+
+  const isMobile = useIsMobile();
+  if (isMobile)
+    return <MobileHome user={user} bookings={bookings} resources={resources} onNavigate={onNavigate} onNewBooking={onNewBooking} onNewClient={onNewClient} />;
 
   const activeVehicles = resources?.vehicles.filter((v) => v.active).length ?? 0;
   const activeInstructors = resources?.instructors.filter((i) => i.active).length ?? 0;
@@ -389,6 +395,170 @@ export function Dashboard({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ------------------------------------------------------------------ Mobile */
+
+function useTick(ms = 30000) {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return now;
+}
+
+/** « dans 35 min », « dans 2 h 10 », « demain à 8:00 », « dimanche à 9:00 » */
+function untilLabel(target: Date, now: Date) {
+  const mins = Math.round((target.getTime() - now.getTime()) / 60000);
+  if (mins <= 0) return "maintenant";
+  if (mins < 60) return `dans ${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const sameDay = target.toDateString() === now.toDateString();
+  const at = target.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (sameDay || h < 12) return `dans ${h} h${m ? ` ${String(m).padStart(2, "0")}` : ""}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (target.toDateString() === tomorrow.toDateString()) return `demain à ${at} (dans ${h} h)`;
+  if (h < 24 * 6) return `${target.toLocaleDateString("fr-FR", { weekday: "long" })} à ${at}`;
+  return `le ${target.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} à ${at}`;
+}
+
+function MobileHome({
+  user,
+  bookings,
+  resources,
+  onNavigate,
+  onNewBooking,
+  onNewClient,
+}: {
+  user: User;
+  bookings: Booking[];
+  resources: Resources | null;
+  onNavigate: (v: string) => void;
+  onNewBooking: () => void;
+  onNewClient: () => void;
+}) {
+  const now = useTick();
+  const mine = Boolean(user.instructorId);
+  const relevant = bookings
+    .filter((b) => !mine || b.instructor_id === user.instructorId)
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const today = relevant.filter((b) => new Date(b.starts_at).toDateString() === now.toDateString());
+  const live = relevant.find((b) => new Date(b.starts_at) <= now && new Date(b.ends_at) > now);
+  const next = relevant.find((b) => new Date(b.starts_at) > now);
+  const hm = (v: string) => new Date(v).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const leftToday = today.filter((b) => new Date(b.ends_at) > now).length;
+  const firstName = user.name.split(" ")[0];
+  const hour = now.getHours();
+  const hello = hour < 5 || hour >= 18 ? "Bonsoir" : "Bonjour";
+  const colorOf = (b: Booking) => {
+    if (b.service_type === "exam" || b.session_kind === "exam") return resources?.planningColors?.exam ?? "#f59e0b";
+    if (!b.instructor_id) return resources?.planningColors?.companion ?? "#0ea5e9";
+    const list = resources?.instructors ?? [];
+    return list.find((i) => i.id === b.instructor_id)?.color || b.instructor_color || "var(--acc)";
+  };
+  const focus = live ?? next;
+
+  return (
+    <div className="mHome">
+      <MobileTopBar
+        title={`${hello}, ${firstName}`}
+        subtitle={now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }).replace(/^./, (c) => c.toUpperCase())}
+        right={<MobileSearchButton />}
+      />
+
+      <DashboardHero bookings={bookings} resources={resources} onPlan={() => onNavigate("Planning")} onNewClient={onNewClient} />
+
+      <button type="button" className="mPlanBand" onClick={onNewBooking}>
+        <span className="mPlanIcon">
+          <CalendarDays size={20} />
+        </span>
+        <span className="mPlanText">
+          <strong>Planifier une séance</strong>
+          <small>Élève, horaire et véhicule en quelques secondes</small>
+        </span>
+        <Plus size={20} />
+      </button>
+
+      {/* Prochaine séance / séance en cours */}
+      {focus ? (
+        <button type="button" className={`mNextCard ${live ? "live" : ""}`} style={{ ["--c" as string]: colorOf(focus) }} onClick={() => onNavigate("Planning")}>
+          <span className="mNextLabel">
+            <Clock size={14} />
+            {live
+              ? `${mine ? "Votre séance" : "Séance"} en cours · fin ${untilLabel(new Date(live.ends_at), now)}`
+              : `${mine ? "Votre prochaine séance" : "Prochaine séance"} ${untilLabel(new Date(focus.starts_at), now)}`}
+          </span>
+          <strong className="mNextName">
+            {focus.first_name} {focus.last_name}
+          </strong>
+          <span className="mNextMeta">
+            <span>
+              <CalendarDays size={14} /> {hm(focus.starts_at)} – {hm(focus.ends_at)}
+            </span>
+            <span>
+              <Car size={14} /> {focus.vehicle_label}
+            </span>
+          </span>
+          {!mine && (
+            <span className="mNextWho">
+              <UserCheck size={14} /> {focus.instructor_name || (focus.companion_name ? `Accompagnateur : ${focus.companion_name}` : "Accompagnateur personnel")}
+            </span>
+          )}
+        </button>
+      ) : (
+        <div className="mNextCard empty">
+          <span className="mNextLabel">
+            <Clock size={14} /> {mine ? "Aucune séance prévue pour vous" : "Aucune séance à venir"}
+          </span>
+        </div>
+      )}
+
+      <div className="mSection">
+        <div className="mSectionHead">
+          <h2>{mine ? "Vos séances aujourd'hui" : "Séances d'aujourd'hui"}</h2>
+          <span>{today.length ? `${today.length} · ${leftToday} à venir` : "0"}</span>
+        </div>
+        {today.length === 0 ? (
+          <p className="mMuted">Rien de prévu aujourd&apos;hui.</p>
+        ) : (
+          <div className="mTodayList">
+            {today.map((b) => {
+              const past = new Date(b.ends_at) < now;
+              const isLive = b === live;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  className={`mTodayItem ${past ? "past" : ""} ${isLive ? "live" : ""}`}
+                  style={{ ["--c" as string]: colorOf(b) }}
+                  onClick={() => onNavigate("Planning")}
+                >
+                  <span className="mTodayTime">
+                    <strong>{hm(b.starts_at)}</strong>
+                    <small>{hm(b.ends_at)}</small>
+                  </span>
+                  <span className="mTodayBody">
+                    <strong>
+                      {b.first_name} {b.last_name}
+                    </strong>
+                    <small>
+                      {b.vehicle_label}
+                      {!mine && ` · ${b.instructor_name || "Acc. perso"}`}
+                    </small>
+                  </span>
+                  {isLive ? <em>En cours</em> : past ? <FileCheck2 size={16} /> : <ArrowRight size={16} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

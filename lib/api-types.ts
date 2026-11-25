@@ -9,6 +9,7 @@ export type User = {
   permissions: string[];
   roles?: string[];
   mustChangePassword?: boolean;
+  instructorId?: string | null;
 };
 
 export type AdminUser = {

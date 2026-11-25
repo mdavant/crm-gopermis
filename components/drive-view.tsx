@@ -27,7 +27,11 @@ import {
   ClipboardPaste,
   Plus,
   CheckSquare,
+  Camera,
+  ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
+import { MobileTopBar } from "./mobile-shell";
 import { useIsMobile } from "../lib/use-mobile";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api-types";
@@ -127,6 +131,9 @@ export function DriveView() {
   const [toast, setToast] = useState("");
   const [undo, setUndo] = useState<{ run: () => void } | null>(null);
   const isMobile = useIsMobile();
+  const [addOpen, setAddOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const cameraInput = useRef<HTMLInputElement>(null);
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const lassoBase = useRef<Set<string>>(new Set());
   const justLassoed = useRef(false);
@@ -765,6 +772,47 @@ export function DriveView() {
 
       {/* -------------------------------------------- Zone fichiers */}
       <section className="dMain" {...dropOn(currentTarget)}>
+        {isMobile && (() => {
+          const crumbs = data?.breadcrumbs ?? [];
+          const inSub = view === "folder" && !q && crumbs.length > 1;
+          const parent = inSub ? crumbs[crumbs.length - 2] : null;
+          return (
+            <MobileTopBar
+              left={
+                inSub ? (
+                  <button type="button" className="mIconBtn" aria-label="Dossier parent" onClick={() => goFolder(parent!.id)}>
+                    <ArrowLeft size={19} />
+                  </button>
+                ) : undefined
+              }
+              title={title ?? crumbs.at(-1)?.name ?? "Mon Drive"}
+              subtitle={inSub ? crumbs.slice(0, -1).map((c) => c.name).join(" › ") : data ? `${data.stats.files} fichier${data.stats.files > 1 ? "s" : ""} · ${formatBytes(data.stats.bytes)}` : undefined}
+              right={
+                <>
+                  <button type="button" className={`mIconBtn ${searchOpen || q ? "on" : ""}`} aria-label="Rechercher" onClick={() => setSearchOpen((o) => !o)}>
+                    <Search size={18} />
+                  </button>
+                  {canWrite && !inTrash && (
+                    <button type="button" className="mIconBtn mAccentBtn" aria-label="Ajouter" onClick={(e) => { e.stopPropagation(); setAddOpen(true); }}>
+                      <Plus size={20} />
+                    </button>
+                  )}
+                </>
+              }
+            />
+          );
+        })()}
+        {isMobile && (searchOpen || q) && (
+          <label className="mSearchField">
+            <Search size={17} />
+            <input autoFocus type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher dans le Drive" />
+            {q && (
+              <button type="button" onClick={() => setQ("")} aria-label="Effacer">
+                <X size={15} />
+              </button>
+            )}
+          </label>
+        )}
         {/* Navigation compacte (téléphone) */}
         <nav className="dMobileNav">
           <button type="button" className={view === "folder" ? "active" : ""} onClick={() => goFolder(null)}>
@@ -779,6 +827,14 @@ export function DriveView() {
           <button type="button" className={view === "trash" ? "active" : ""} onClick={() => { setQ(""); setView("trash"); }}>
             <Trash2 size={15} /> Corbeille
           </button>
+          <span className="dMobileLayout">
+            <button type="button" className={layout === "list" ? "on" : ""} onClick={() => setLayout("list")} aria-label="Liste">
+              <List size={16} />
+            </button>
+            <button type="button" className={layout === "grid" ? "on" : ""} onClick={() => setLayout("grid")} aria-label="Grille">
+              <LayoutGrid size={16} />
+            </button>
+          </span>
         </nav>
         <header className="dHead">
           <div className="dCrumbs">
@@ -1191,20 +1247,50 @@ export function DriveView() {
         </div>
       )}
 
-      {/* Bouton « + » (téléphone) */}
-      {isMobile && canWrite && !inTrash && selected.size === 0 && (
-        <button
-          type="button"
-          className="mFab"
-          aria-label="Ajouter"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenu({ x: 0, y: 0, bg: true });
-          }}
-        >
-          <Plus size={24} />
-        </button>
-      )}
+      {/* Feuille « Ajouter » (téléphone) */}
+      {addOpen &&
+        createPortal(
+          <div className="mSheetBg" onClick={() => setAddOpen(false)}>
+            <div className="mBottomSheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mGrab" />
+              <h3>Ajouter dans « {data?.breadcrumbs?.at(-1)?.name ?? "Mon Drive"} »</h3>
+              <div className="mAddGrid">
+                <button type="button" onClick={() => { setAddOpen(false); fileInput.current?.click(); }}>
+                  <span style={{ ["--t" as string]: "var(--acc)" }}><Upload size={22} /></span>
+                  Importer
+                  <small>Fichiers du téléphone</small>
+                </button>
+                <button type="button" onClick={() => { setAddOpen(false); cameraInput.current?.click(); }}>
+                  <span style={{ ["--t" as string]: "#12a594" }}><Camera size={22} /></span>
+                  Photo
+                  <small>Scanner un document</small>
+                </button>
+                <button type="button" onClick={() => { setAddOpen(false); setDialog({ kind: "folder" }); }} disabled={view !== "folder"}>
+                  <span style={{ ["--t" as string]: "#e8833a" }}><FolderPlus size={22} /></span>
+                  Dossier
+                  <small>Nouveau dossier</small>
+                </button>
+              </div>
+              {clipboard && view === "folder" && (
+                <button type="button" className="mSheetRow" onClick={() => { setAddOpen(false); paste(); }}>
+                  <ClipboardPaste size={18} /> Coller {clipboard.ids.length} élément{clipboard.ids.length > 1 ? "s" : ""} ici
+                </button>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+      <input
+        ref={cameraInput}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => {
+          if (e.target.files) enqueue(e.target.files, currentTarget);
+          e.target.value = "";
+        }}
+      />
 
       {/* -------------------------------------------- Fenêtres */}
       {dialog?.kind === "folder" && (
@@ -1262,7 +1348,11 @@ export function DriveView() {
           </div>
         </Modal>
       )}
-      {preview && <Preview item={preview} onClose={() => setPreview(null)} onDownload={() => download([preview])} />}
+      {preview &&
+        createPortal(
+          <Preview item={preview} mobile={isMobile} onClose={() => setPreview(null)} onDownload={() => download([preview])} />,
+          document.body,
+        )}
     </div>
   );
 }
@@ -1433,8 +1523,23 @@ function DocxPreview({ url }: { url: string }) {
   );
 }
 
-function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => void; onDownload: () => void }) {
+function Preview({ item, onClose, onDownload, mobile }: { item: Entry; onClose: () => void; onDownload: () => void; mobile?: boolean }) {
   const t = fileTypeInfo(item.name, item.mimeType);
+  // Le bouton « retour » du téléphone ferme l'aperçu au lieu de quitter la page.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    window.history.pushState({ dPreview: true }, "");
+    const onPop = () => closeRef.current();
+    window.addEventListener("popstate", onPop);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && window.history.back();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+  const close = () => window.history.back();
   const src = `${item.url}?inline=1`;
   const mime = item.mimeType || "";
   let body: React.ReactNode;
@@ -1445,6 +1550,17 @@ function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => vo
     body = <video src={src} controls autoPlay className="dPreviewMedia" />;
   } else if (t.glyph === "audio" || mime.startsWith("audio/")) {
     body = <audio src={src} controls autoPlay />;
+  } else if (t.ext === "pdf" && mobile) {
+    // Les navigateurs mobiles n'affichent pas bien un PDF intégré : on l'ouvre dans la visionneuse du téléphone.
+    body = (
+      <div className="dPreviewNone">
+        <FileTypeIcon name={item.name} mime={item.mimeType} size={72} />
+        <p>{item.name}</p>
+        <a className="dPreviewOpen" href={src} target="_blank" rel="noopener noreferrer">
+          <ExternalLink size={17} /> Ouvrir le PDF
+        </a>
+      </div>
+    );
   } else if (t.ext === "pdf") {
     body = <iframe src={src} title={item.name} className="dPreviewFrame" />;
   } else if (t.ext === "docx") {
@@ -1465,16 +1581,18 @@ function Preview({ item, onClose, onDownload }: { item: Entry; onClose: () => vo
     );
   }
   return (
-    <div className="dPreview" onClick={onClose} role="dialog" aria-modal="true" aria-label={`Aperçu de ${item.name}`}>
+    <div className="dPreview" onClick={close} role="dialog" aria-modal="true" aria-label={`Aperçu de ${item.name}`}>
       <div className="dPreviewBar" onClick={(e) => e.stopPropagation()}>
-        <FileTypeIcon name={item.name} mime={item.mimeType} size={22} />
-        <strong>{item.name}</strong>
-        <small>{formatBytes(item.size)}</small>
-        <button type="button" className="btnSecondary" onClick={onDownload}>
-          <Download size={15} /> Télécharger
+        <button type="button" className="dPreviewClose dPreviewBack" onClick={close} aria-label="Fermer l'aperçu">
+          {mobile ? <ArrowLeft size={20} /> : <X size={18} />}
         </button>
-        <button type="button" className="dPreviewClose" onClick={onClose} aria-label="Fermer">
-          <X size={18} />
+        <FileTypeIcon name={item.name} mime={item.mimeType} size={22} />
+        <span className="dPreviewName">
+          <strong>{item.name}</strong>
+          <small>{formatBytes(item.size)}</small>
+        </span>
+        <button type="button" className="btnSecondary dPreviewDl" onClick={onDownload} aria-label="Télécharger">
+          <Download size={16} /> <span>Télécharger</span>
         </button>
       </div>
       <div className="dPreviewBody" onClick={(e) => e.stopPropagation()}>
